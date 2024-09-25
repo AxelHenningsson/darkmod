@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "darkmod"
+version = "0.0.1"
+description = "Forward model for Dark field X-ray Microscopy."
+authors = [
+  { name = "{Axel Henningsson}", email = "{nilsaxelhenningsson@gmail.com}" }
+]
+dependencies = ["numpy",
+"scipy",
+"matplotlib",
+"pandas",
+"xfab",
+"dfxm",
+]
