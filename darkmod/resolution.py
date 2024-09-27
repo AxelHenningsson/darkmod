@@ -42,73 +42,76 @@ class DualKentGauss(object):
         self.secondary_ray_direction = Kent(gamma_CRL, kappa_CRL, beta_CRL)
         self.ray_wavelength = Normal(mean_wavelength, std_wavelength)
 
-    def compile(self, Q, res=5 * 1e-4):
+    def compile(self, Q, res=5*1e-4):
         """Compile an approximation of p_Q - the reciprocal resolution function.
 
         Args:
             Q (:obj:`np.ndarray`): Nominal Q-vector.
         """
         self.Q = Q
-        Q_sample = self.sample( number_of_samples=10000 ) #- self.Q.reshape(3,1)
-        Q_sample_q_system = lab_to_Q(Q_sample, self.Q)
+        q_ranges = self._estimate_p_Q_support(Q, res)
+        q_points_lab, grid_shape = self._get_integration_points(q_ranges)
+        p_Q, std_p_Q = self._monte_carlo_integrate(q_points_lab, dv=res**3)
+        self.p_Q = p_Q.reshape(grid_shape)
+        self.std_p_Q = std_p_Q.reshape(grid_shape)
+        self._set_interpolation(q_ranges, self.p_Q, self.std_p_Q)
 
+    def _get_integration_points(self, q_ranges):
+        Qx, Qy, Qz = np.meshgrid( *q_ranges, indexing='ij' )
+        q_points = np.array([Qx.flatten(), Qy.flatten(), Qz.flatten()])
+        q_points_lab = Q_to_lab(q_points, self.Q)
+        return q_points_lab, Qx.shape
 
-
+    def _estimate_p_Q_support(self, Q, res):
+        Q_sample = self.sample( number_of_samples=10000 )
+        Q_sample_q_system = lab_to_Q(Q_sample, Q)
         mx, my, mz = np.mean(Q_sample_q_system, axis=1)
         stdx, stdy, stdz = np.std(Q_sample_q_system, axis=1)
-
         qx_range = np.arange( -2.5*stdx + mx, 2.5*stdx + mx + res, res)
         qy_range = np.arange( -2.5*stdy + my, 2.5*stdy + my + res, res)
         qz_range = np.arange( -2.5*stdz + mz, 2.5*stdz + mz + res, res)
+        return qx_range, qy_range, qz_range
 
-        #print(qz_range.shape, qy_range.shape, qz_range.shape)
+    def _set_interpolation(self, points, p_Q, std_p_Q):
+        self._p_Q = self._rgi(points, p_Q)
+        self._std_p_Q = self._rgi(points, std_p_Q)
 
-        Qx, Qy, Qz = np.meshgrid( qx_range, qy_range, qz_range, indexing='ij' )
-        q_points = np.array([Qx.flatten(), Qy.flatten(), Qz.flatten()])
-        q_points_lab = Q_to_lab(q_points, self.Q)
-
-
-        p_Q, std_p_Q = self._monte_carlo_integrate(q_points_lab, dv=res**3)
-        p_Q = p_Q.reshape(Qx.shape)
-        self._p_Q = RegularGridInterpolator((qx_range, qy_range, qz_range), p_Q, method='nearest')
-
+    def _rgi(self, points, values):
+        return RegularGridInterpolator(points,
+                                       values,
+                                       method='linear',
+                                       bounds_error=False,
+                                       fill_value=0)
 
     def _monte_carlo_integrate(self, q_points_lab, dv):
 
-        number_of_samples = 1000
+        number_of_samples = 15000
 
         if self.secondary_ray_direction.kappa > self.primary_ray_direction.kappa:
             prior = 'CRL'
             ghat = self.secondary_ray_direction.sample(number_of_samples)
-            mode = self.secondary_ray_direction.gamma[:, 0]
-            log_norm_const = self.secondary_ray_direction(mode, normalise=False, log=True)
+            mode = self.primary_ray_direction.gamma[:, 0]
+            log_norm_const = self.primary_ray_direction(mode, normalise=False, log=True)
         else:
             prior = 'beam'
             nhat = self.primary_ray_direction.sample(number_of_samples)
-            mode = self.primary_ray_direction.gamma[:, 0]
-            log_norm_const = self.primary_ray_direction(mode, normalise=False, log=True)
+            mode = self.secondary_ray_direction.gamma[:, 0]
+            log_norm_const = self.secondary_ray_direction(mode, normalise=False, log=True)
 
         Qnorms = np.linalg.norm(q_points_lab, axis=0)
         dmap = (2*np.pi)/Qnorms
 
-
         p_Q = np.zeros((q_points_lab.shape[1], ))
         std_p_Q = np.zeros((q_points_lab.shape[1], ))
 
-
         for i, Q_probe in enumerate(q_points_lab.T):
-            #print(i / float(len(q_points_lab.T)))
-            Q_probe = self.Q
 
             d = dmap[i]
 
-            print(d, (2*np.pi)/np.linalg.norm(Q_probe))
-            raise
-
-            if prior=='CRL':
+            if prior == 'CRL':
                 nhat = self._get_nhat(ghat, d, Q_probe)
                 log_p_sample = self.primary_ray_direction(nhat, normalise=False, log=True)
-            elif prior=='beam':
+            elif prior == 'beam':
                 ghat = self._get_ghat(nhat, d, Q_probe)
                 log_p_sample = self.secondary_ray_direction(ghat, normalise=False, log=True)
 
@@ -116,17 +119,13 @@ class DualKentGauss(object):
             lamda = self._get_wavelength(nhat, d, Q_probe)
             log_p_A = self.ray_wavelength(lamda, normalise=False, log=True)
 
-            # some safe removals to save the costly exp call
-            p_tot = log_c_p + log_p_A
-            print(log_p_sample.max(), log_norm_const)
-            #print(np.max(p_tot), np.log( (1/number_of_samples) * 1e-16 ))
+            p_tot_log = log_c_p + log_p_A
 
-            m = p_tot < np.log( (1/number_of_samples) * 1e-16 )
-            p_tot[m] = 0
-            p_tot[~m] = self._exp( p_tot[~m] )
+            # some safe removals to save the costly exp call
+            m = p_tot_log < np.log( (1/number_of_samples) * 1e-16 )
+            p_tot = self._exp( p_tot_log[~m] )
 
             p_Q[i] = np.sum(p_tot) / number_of_samples
-            #raise
             std_p_Q[i] = np.std(p_tot) / np.sqrt(number_of_samples)
 
         norm_const = np.sum(p_Q  * dv)
@@ -244,6 +243,7 @@ if __name__ == "__main__":
     pr = cProfile.Profile()
     pr.enable()
     t1 = time.perf_counter()
+
     res.compile(Q)
 
     t2 = time.perf_counter()
@@ -254,12 +254,20 @@ if __name__ == "__main__":
     print('\n\nCPU time is : ', t2-t1, 's')
 
     Qs = np.zeros((3, 256))
-    Qs[0,:] = np.linspace(Q[0] - 10*1e-4, Q[0] + 10*1e-4, Qs.shape[1])
+    Qs[0,:] = np.linspace(Q[0] - 25*1e-4, Q[0] + 25*1e-4, Qs.shape[1])
     Qs[1,:] = Q[1]
     Qs[2,:] = Q[2]
-    p_Q = res( Q.reshape(3,1) )
-    print(p_Q)
+    p_Q = res( Qs )
     plt.plot(Qs[0,:] - Q[0], p_Q, 'ko--')
+    plt.show()
+
+    qy = np.linspace(Q[1] - 25*1e-4, Q[1] + 25*1e-4, 64)
+    qz = np.linspace(Q[2] - 25*1e-4, Q[2] + 25*1e-4, 64)
+    Qx, Qy = np.meshgrid(qy,qz,indexing='ij')
+
+    m,n,o = res.p_Q.shape
+    plt.figure()
+    plt.imshow(res.p_Q[m//2, : , :])
     plt.show()
     raise
 
