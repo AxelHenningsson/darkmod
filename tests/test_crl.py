@@ -31,6 +31,17 @@ class TestCompundRefractiveLens(unittest.TestCase):
         M = self._get_MN_numerical(self.lens_space, focal, self.number_of_lenses)
         np.testing.assert_array_almost_equal(self.crl.M_N, M)
 
+    def test_imaging_system(self):
+        self.crl.theta = np.radians(10)
+        self.crl.eta = np.radians(-20)
+        I = self.crl.imaging_system
+        np.testing.assert_allclose(I[:,0], self.crl.optical_axis)
+        self.assertGreater( I[0,0], I[1,0] )
+        self.assertGreater( I[0,0], I[2,0] )
+        self.assertGreater( I[0,0], 0 )
+        self.assertGreater( I[1,0], 0 )
+        self.assertGreater( I[2,0], 0 )
+
     def _get_MN_numerical(self, distance, focal_length, number_of_lenses):
         """
         Based on Ray matrix transfer theory.

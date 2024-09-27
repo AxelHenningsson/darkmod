@@ -19,9 +19,7 @@ class Goniometer:
         """
         Initialize DFXM goniometer.
         """
-        self._imaging_system_0 = np.eye(3, 3)
         self.phi = self.chi = self.mu = self.omega = 0
-        self.eta = self.theta = None
 
         self._xhat_lab = np.array([1., 0., 0.])
         self._yhat_lab = np.array([0., 1., 0.])
@@ -43,6 +41,9 @@ class Goniometer:
         Either give angles phi, chi, omega, mu or a scipy.spatial.transform.Rotation
         from which angles will be computed such that omega=0.
 
+        NOTE: When passing a :obj:`scipy.spatial.transform.Rotation` the angles
+            phi, chi and mu will not in general be as small as possible.
+
         Args:
             phi (:obj:`float`): Phi angle in radians (top rock - y rotation).
             chi (:obj:`float`): Chi angle in radians (top roll - x rotation).
@@ -61,21 +62,14 @@ class Goniometer:
         else:
             raise ValueError('Either pass a scipy.spatial.transform.Rotation or 4 floats: phi, chi, omega, mu.')
 
-    def from_(self, phi, chi, omega, mu):
-        """Move the goniometer to specified angles.
-
-        Args:
-            phi (float): Phi angle in radians (top rock - y rotation).
-            chi (float): Chi angle in radians (top roll - x rotation).
-            omega (float): Omega angle in radians (around Q-vector - z rotation).
-            mu (float): Mu angle in radians (bottom roll - x rotation).
-
-        """
-        self.phi, self.chi, self.omega, self.mu = phi, chi, omega, mu
-
     @property
     def R(self):
         """Rotation matrix for the current goniometer angles.
+
+        This matrix will take a vector in sample system and bring it
+        to the lab frame, such that R @ sample = lab. I.e R is the
+        Cartesian basis of the sample system as described in lab
+        coordinates.
 
         Returns:
             (:obj:`numpy array`): Rotation matrix. shape=(3,3).
@@ -84,28 +78,7 @@ class Goniometer:
         Rx_chi = Rotation.from_rotvec(self._xhat_lab * self.chi)
         Rz_omega = Rotation.from_rotvec(self._zhat_lab * self.omega)
         Ry_mu = Rotation.from_rotvec(self._yhat_lab * self.mu)
-        return (Ry_phi * Rx_chi * Rz_omega * Ry_mu).as_matrix()
-
-    @property
-    def optical_axis(self):
-        """optical axis for the current goniometer angles (as given in lab coordinates).
-
-        Returns:
-            (:obj:`numpy array`): optical axis. shape=(3,).
-        """
-        return self.imaging_system[:, 0]
-
-    @property
-    def imaging_system(self):
-        """imaging coordinate system for the current goniometer angles (as given in lab coordinates).
-
-        Returns:
-            (:obj:`numpy array`): imaging coordinate system. shape=(3,3).
-        """
-        rotation_th = Rotation.from_rotvec(self._yhat_lab*(-2*self.theta)).as_matrix()
-        rotation_eta = Rotation.from_rotvec(self._xhat_lab*(self.eta)).as_matrix()
-        self._imaging_system = rotation_eta @ rotation_th @ self._imaging_system_0
-        return self._imaging_system[:, :]
+        return (Ry_mu * Rz_omega * Rx_chi * Ry_phi).as_matrix()
 
     @property
     def info(self):

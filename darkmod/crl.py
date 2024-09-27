@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.spatial.transform import Rotation
 
 
 """
@@ -22,6 +23,40 @@ class CompundRefractiveLens(object):
         self.lens_radius = lens_radius
         self.refractive_decrement = refractive_decrement
         self.magnification = magnification
+
+        self._xhat_lab = np.array([1., 0., 0.])
+        self._yhat_lab = np.array([0., 1., 0.])
+        self._zhat_lab = np.array([0., 0., 1.])
+
+        self._imaging_system_0 = np.eye(3, 3)
+
+        self.theta = None
+        self.eta = None
+
+    def goto(self, theta, eta):
+        self.theta = theta
+        self.eta = eta
+
+    @property
+    def optical_axis(self):
+        """optical axis for the current angles (as given in lab coordinates).
+
+        Returns:
+            (:obj:`numpy array`): optical axis. shape=(3,).
+        """
+        return self.imaging_system[:, 0]
+
+    @property
+    def imaging_system(self):
+        """imaging coordinate system for the current angles (as given in lab coordinates).
+
+        Returns:
+            (:obj:`numpy array`): imaging coordinate system. shape=(3,3).
+        """
+        rotation_th = Rotation.from_rotvec(self._yhat_lab*(-2*self.theta))
+        rotation_eta = Rotation.from_rotvec(self._xhat_lab*(self.eta))
+        rot = (rotation_eta * rotation_th).as_matrix()
+        return rot @ self._imaging_system_0
 
     @property
     def T(self):

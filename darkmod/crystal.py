@@ -1,10 +1,10 @@
-import laue
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.spatial.transform import Rotation
 
 from darkmod.goniometer import Goniometer
+from darkmod import laue
 
 # TODO: implement non-zero eta diffraction alignments.
 
@@ -111,10 +111,11 @@ class Crystal(object):
         """
         self.align(hkl, axis=np.array([0, 0, 1])) # align with z-axis first
         G = laue.get_G(self.U, self.B, hkl)
-        self.goniometer.theta = laue.get_bragg_angle(G, energy)
-        self.goniometer.relative_move(dmu=-self.goniometer.theta) # align with the bragg condition
+        theta = laue.get_bragg_angle(G, energy)
+        self.goniometer.relative_move(dmu=-theta) # align with the bragg condition
         self.U = self.goniometer.R @ self._U0
-        self.goniometer.eta = 0
+        eta = 0
+        return theta, eta
 
 
     def align(self, hkl, axis):

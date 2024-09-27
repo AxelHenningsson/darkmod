@@ -4,8 +4,7 @@ import matplotlib.pyplot as plt
 
 def _lab_to_Q_rot_mat(Q_lab):
     q_ll = Q_lab / np.linalg.norm(Q_lab)
-    yhat = np.array([0, 1, 0])
-    q_roll = yhat
+    q_roll = np.array([0, 1, 0])
     q_rock = np.cross(q_roll, q_ll)
     q_rock = q_rock / np.linalg.norm(q_rock)
     return np.array((q_rock, q_roll, q_ll))

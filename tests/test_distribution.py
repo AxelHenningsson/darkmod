@@ -201,7 +201,7 @@ class TestUniformKent(unittest.TestCase):
         beta = 1
         kent = Kent(gamma, kappa, beta)
         phi_max = kent._uniform_spherical_cone.phi_max
-        phi_max_approx = np.arccos(1 + np.log(1e-4) / kappa) # if beta << kappa
+        phi_max_approx = np.arccos(1 + np.log(kent._eps) / kappa) # if beta << kappa
         self.assertAlmostEqual(np.degrees(phi_max), np.degrees(phi_max_approx), places=1)
 
 if __name__ == '__main__':

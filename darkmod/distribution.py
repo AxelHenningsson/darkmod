@@ -228,8 +228,8 @@ class Kent:
             # we select eps = 1e-5 which should be something like 4.5 stds,
             # given that the Kent is very similar to a normal on the sphere.
 
-            eps = 1e-5
-            b = 1 + np.log(eps)/kappa
+            self._eps = 1e-5
+            b = 1 + np.log(self._eps)/kappa
             a = (beta/kappa)
             if a==0:
                 phi_max = np.arccos( b )
