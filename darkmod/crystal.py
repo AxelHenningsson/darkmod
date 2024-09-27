@@ -164,5 +164,9 @@ class Crystal(object):
 
         return df
 
-    def diffract(self):
+    def diffract(self, resolution_function, crl, detector):
+        # 1. compute the Q_lab - crystal + goni
+        # 2. compute the p_Q(Q_lab) - resolution_function
+        # 3. compute detector cooridnates - crl + detector
+        # 4. render image - detector
         pass

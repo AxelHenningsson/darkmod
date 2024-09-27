@@ -9,16 +9,20 @@ from darkmod.crystal import Crystal
 from darkmod.resolution import DualKentGauss
 
 
-crystal = Crystal(X, Y, Z, unit_cell, orientation, defgrad)
-crystal.bring_to_bragg(hkl = np.array([0, 0, 2]), energy=energy)
-
 resolution_function = DualKentGauss(params...)
+resolution_function.compile(qgrid)
+
 crl = CompundRefractiveLens(params...)
 detector = Detector(params)
 
 
-crystal.diffract( resolution_function, crl, detector )
+crystal = Crystal(X, Y, Z, unit_cell, orientation, defgrad)
+crystal.bring_to_bragg(hkl = np.array([0, 0, 2]), energy=energy)
 
+for phi in np.linspace(crystal.goniometer.phi-0.1, crystal.goniometer.phi+0.1, 5):
+    for chi in np.linspace(crystal.goniometer.chi-0.1, crystal.goniometer.chi+0.1, 5):
+        crystal.goniometer.goto(phi, chi, crystal.goniometer.omega, crystal.goniometer.mu)
+        image = crystal.diffract( resolution_function, crl, detector )
 
 
 if __name__ == "__main__":
