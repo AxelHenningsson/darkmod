@@ -89,19 +89,6 @@ class Goniometer:
         for key in self.motors:
             print(key.ljust(7), str(np.round(self.motors[key], 6)))
         print('---------------------------------------------------------------------')
-        print('Bragg conditions (degrees) : ')
-        print('---------------------------------------------------------------------')
-        if self.theta is not None:
-            print('theta ', np.degrees(self.theta))
-            print('eta ', np.degrees(self.eta))
-        else:
-            print('Not yet set to any Bragg conditions')
-        print('---------------------------------------------------------------------')
-        print('The optical axis is  : ')
-        print('---------------------------------------------------------------------')
-        print(self.optical_axis)
-
-        print('---------------------------------------------------------------------')
         print('\n')
 
     @property

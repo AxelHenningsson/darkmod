@@ -13,9 +13,13 @@ from darkmod import laue
 class Crystal(object):
 
     def __init__(self, X, Y, Z, unit_cell, orientation, defgrad):
-        """A spatilally extended crystal. Each point in the crystal is associated with a deformation.
+        """A spatilally extended crystal.
 
-        Until the crystal mounts a goniometer, there is no lab frame but only a sample and crystal frame.
+        Each point (x,y,z) in the crystal is associated with a deformation gradient tensor (F).
+
+        At instatiation the crystal internally mounts a goniometer which defines the lab
+        frame. The crystal can be accessed through the `goniometer` attribute. Please see
+        `darkmod.goniometer.Goniometer` for documentation on the goniometer interface.
 
         All input are given in sample coordinates such that
 
@@ -31,8 +35,7 @@ class Crystal(object):
         """
         self.goniometer = Goniometer()
 
-        self.U  = orientation
-        self._U0 = orientation[:,:]
+        self.U = orientation
         self.unit_cell = unit_cell
         self.B = laue.get_b_matrix(unit_cell)
 
@@ -58,7 +61,7 @@ class Crystal(object):
 
     @property
     def Y(self):
-        return self._x[1, :].reshape( self._grid_scalar_shape )
+        return self._x[1, :].reshape(self._grid_scalar_shape)
 
     @Y.setter
     def Y(self, value):
@@ -66,7 +69,7 @@ class Crystal(object):
 
     @property
     def Z(self):
-        return self._x[2, :].reshape( self._grid_scalar_shape )
+        return self._x[2, :].reshape(self._grid_scalar_shape)
 
     @Z.setter
     def Z(self, value):
@@ -74,26 +77,100 @@ class Crystal(object):
 
     @property
     def defgrad(self):
-        return self._F.reshape( self._grid_tensor_shape )
+        return self._F.reshape(self._grid_tensor_shape)
 
     @defgrad.setter
     def defgrad(self, value):
-        self._F = value.reshape( self._flat_tensor_shape )
+        self._F = value.reshape(self._flat_tensor_shape)
 
     def get_Q_crystal(self, hkl):
-        Q_0_sample = self.U @ self.B @ hkl
-        return (self.U.T @ (self._FiT @ Q_0_sample)).reshape(self._grid_vector_shape)
+        """Diffraction vectors in crystal coordinates.
+
+        This method will return a Q-vector per spatial point in the crystal. i.e
+        one Q vector per point in X,Y,Z. This means that the array:
+
+            Q = get_Q_crystal(hkl)
+
+        holds the Q-components, Qx = Q[i,j,k,0], Qy = Q[i,j,k,1], Qz = Q[i,j,k,2]
+        at a point x,y,z = (X[i,j,k], Y[i,j,k], Z[i,j,k]).
+
+        NOTE: Crystal coordinates are different from Q-system. The notation is NOT
+            the same as Poulsen 2017. Here we define: Q_crystal = U @ B @ hkl.
+
+        Args:
+            hkl (:obj:`numpy array`): Miller indices [h, k, l], shape=(3,).
+
+        Returns:
+            :obj:`numpy array`: A field of Q-vectors, shape=(n,m,o,3).
+        """
+        Q_crystal_flat = self.U.T @ self._get_Q_sample_flat(hkl).T
+        return Q_crystal_flat.T.reshape(self._grid_vector_shape)
 
     def get_Q_sample(self, hkl):
-        Q_0_sample = self.U @ self.B @ hkl
-        return (self._FiT @ Q_0_sample).reshape(self._grid_vector_shape)
+        """Diffraction vectors in sample coordinates.
+
+        This method will return a Q-vector per spatial point in the crystal. i.e
+        one Q vector per point in X,Y,Z. This means that the array:
+
+            Q = get_Q_sample(hkl)
+
+        holds the Q-components, Qx = Q[i,j,k,0], Qy = Q[i,j,k,1], Qz = Q[i,j,k,2]
+        at a point x,y,z = (X[i,j,k], Y[i,j,k], Z[i,j,k]).
+
+        Args:
+            hkl (:obj:`numpy array`): Miller indices [h, k, l], shape=(3,).
+
+        Returns:
+            :obj:`numpy array`: A field of Q-vectors, shape=(n,m,o,3).
+        """
+        Q_sample_flat = self._get_Q_sample_flat(hkl)
+        return Q_sample_flat.reshape(self._grid_vector_shape)
 
     def get_Q_lab(self, hkl):
-        if self.goniometer is None:
-            raise ValueError('The crystal needs to mount a goniometer to have a meaningful distinction between sample and lab frames')
-        Q_0_sample = self.U @ self.B @ hkl
-        Q_sample = self._FiT @ Q_0_sample
-        return (self.goniometer.R @ Q_sample.T).T.reshape(self._grid_vector_shape)
+        """Diffraction vectors in lab coordinates.
+
+        This method will return a Q-vector per spatial point in the crystal. i.e
+        one Q vector per point in X,Y,Z. This means that the array:
+
+            Q = get_Q_lab(hkl)
+
+        holds the Q-components, Qx = Q[i,j,k,0], Qy = Q[i,j,k,1], Qz = Q[i,j,k,2]
+        at a point x,y,z = (X[i,j,k], Y[i,j,k], Z[i,j,k]).
+
+        Args:
+            hkl (:obj:`numpy array`): Miller indices [h, k, l], shape=(3,).
+
+        Returns:
+            :obj:`numpy array`: A field of Q-vectors, shape=(n,m,o,3).
+        """
+        Q_lab_flat = self.goniometer.R @ self._get_Q_sample_flat(hkl).T
+        return Q_lab_flat.T.reshape(self._grid_vector_shape)
+
+    def _get_Q_sample_flat(self, hkl):
+        return self._FiT @ self._get_Q_0_sample_flat(hkl)
+
+    def _get_Q_0_sample_flat(self, hkl):
+        return self.U @ self.B @ hkl
+
+    def align(self, hkl, axis):
+        """
+        Align the crystal orientation matrix (U) such that the G-vector of the provided Miller indices (hkl)
+        is parallel to a given real space axis.
+
+        Args:
+            hkl (:obj:`numpy array`): Miller indices to align with, ``shape=(3,)``.
+            axis (:obj:`numpy array`): Vector to align with, ``shape=(3,)``.
+
+        """
+        G = laue.get_G(self.U, self.B, hkl)
+        nhat = G / np.linalg.norm(G)
+        axis = axis / np.linalg.norm(axis)
+        primary_rotation_vector = np.cross(nhat, axis)
+        primary_rotation_vector /= np.linalg.norm(primary_rotation_vector)
+        angle = np.arccos(nhat@axis)
+
+        rotation = Rotation.from_rotvec(primary_rotation_vector*angle)
+        self.goniometer.goto(rotation=rotation)
 
     def bring_to_bragg(self, hkl, energy):
         """
@@ -113,31 +190,8 @@ class Crystal(object):
         G = laue.get_G(self.U, self.B, hkl)
         theta = laue.get_bragg_angle(G, energy)
         self.goniometer.relative_move(dmu=-theta) # align with the bragg condition
-        self.U = self.goniometer.R @ self._U0
         eta = 0
         return theta, eta
-
-
-    def align(self, hkl, axis):
-        """
-        Align the crystal orientation matrix (U) such that the G-vector of the provided Miller indices (hkl)
-        is parallel to a given real space axis.
-
-        Args:
-            hkl (:obj:`numpy array`): Miller indices to align with, ``shape=(3,)``.
-            axis (:obj:`numpy array`): Vector to align with, ``shape=(3,)``.
-
-        """
-        G = laue.get_G(self._U0, self.B, hkl)
-        nhat = G / np.linalg.norm(G)
-        axis = axis / np.linalg.norm(axis)
-        primary_rotation_vector = np.cross(nhat, axis)
-        primary_rotation_vector /= np.linalg.norm(primary_rotation_vector)
-        angle = np.arccos(nhat@axis)
-
-        rotation = Rotation.from_rotvec(primary_rotation_vector*angle)
-        self.goniometer.goto(rotation=rotation)
-        self.U = self.goniometer.R @ self._U0
 
     def inspect(self, hkl, energy, rotation_axis=np.array([0, 0, 1])):
         """
