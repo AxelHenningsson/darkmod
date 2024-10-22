@@ -40,6 +40,19 @@ class TestGoniometer(unittest.TestCase):
         self.goni.goto(rotation=rot)
         np.testing.assert_almost_equal(rot.as_matrix(), self.goni.R, decimal=3)
 
+    def test_small_rot(self):
+        # Test that for small rotations, the motor angles are small.
+        rot1 = Rotation.from_rotvec((0.5*np.pi/180)*np.array([0,1,0]))
+        rot2 = Rotation.from_rotvec((-0.85*np.pi/180)*np.array([1,1,1]/np.sqrt(3)))
+        rot = rot1*rot2
+        self.goni.goto(rotation=rot)
+        self.goni.info
+        np.testing.assert_almost_equal(rot.as_matrix(), self.goni.R, decimal=3)
+        self.assertLess(self.goni.phi, np.radians(1))
+        self.assertLess(self.goni.chi, np.radians(1))
+        self.assertLess(self.goni.omega, np.radians(1))
+        self.assertLess(self.goni.mu, np.radians(1))
+
     def test_R(self):
         # Test that the rotation matrix is correct
         rot1 = Rotation.from_rotvec((10*np.pi/180)*np.array([0,1,0]))
@@ -47,6 +60,15 @@ class TestGoniometer(unittest.TestCase):
         rot = rot1*rot2
         self.goni.goto(rotation=rot)
         np.testing.assert_almost_equal(rot.as_matrix(), self.goni.R, decimal=3)
+
+    def test_numpy(self):
+        # Test that numpy rotation matrix works
+        rot1 = Rotation.from_rotvec((10*np.pi/180)*np.array([0,1,0]))
+        rot2 = Rotation.from_rotvec((np.pi/180)*np.array([1,1,1]/np.sqrt(3)))
+        rot = rot1*rot2
+        rot = rot.as_matrix()
+        self.goni.goto(rotation=rot)
+        np.testing.assert_almost_equal(rot, self.goni.R, decimal=3)
 
     def test_optical_axis(self):
         # Test that the optical axis is correct.

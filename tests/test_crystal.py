@@ -4,26 +4,28 @@ from scipy.spatial.transform import Rotation
 import matplotlib.pyplot as plt
 import numpy as np
 
+from darkmod.beam import GaussianBeam
+from darkmod.detector import Detector
+from darkmod.resolution import DualKentGauss
 from darkmod.crystal import Crystal
+from darkmod.crl import CompundRefractiveLens
 from darkmod.laue import keV_to_angstrom
+from darkmod import laue
 
 
 class TestCrystal(unittest.TestCase):
 
     def setUp(self):
-        xg = np.linspace(-1, 1, 5)
-        self.X, self.Y, self.Z = np.meshgrid(xg, xg, xg, indexing='ij')
         self.unit_cell = [4.0493, 4.0493, 4.0493, 90, 90, 90]
         self.orientation = Rotation.from_rotvec((np.pi/4)*np.array([1, 1, 1])/np.sqrt(3.)).as_matrix()
-        self.defgrad = self.simple_shear(self.X.shape)
-        self.crystal = Crystal(self.X,
-                            self.Y,
-                            self.Z,
-                            self.unit_cell,
-                            self.orientation,
-                            self.defgrad)
+        self.crystal = Crystal( self.unit_cell, self.orientation )
         phi, chi, omega, mu = (np.random.rand(4,)-0.5)*np.pi/18.
         self.crystal.goniometer.goto(phi, chi, omega, mu)
+
+        xg = np.linspace(-1, 1, 5)
+        self.X, self.Y, self.Z = np.meshgrid(xg, xg, xg, indexing='ij')
+        self.defgrad = self.simple_shear(self.X.shape)
+        self.crystal.discretize(self.X, self.Y, self.Z, self.defgrad)
 
     def test_field_shapes(self):
         # Test that the coordinate and tesnor arrays can be accessed in grid format.
@@ -184,10 +186,134 @@ class TestCrystal(unittest.TestCase):
         hkl = np.array([[1, -1, 1],[0, -1, 1],[2, 1, 1]]).T
         energy = 17.1
         rotation_axis = np.array([0, 0, 1])
-        pandas_table = self.crystal.inspect(hkl, energy, rotation_axis)
+        _ = self.crystal.inspect(hkl, energy, rotation_axis)
 
     def test_diffract(self):
-        pass
+        number_of_lenses = 50
+        lens_space = 2 * 1e-3
+        lens_radius = 50 * 1e-6
+        refractive_decrement = 1.65 * 1e-6
+        magnification = 10
+        crl = CompundRefractiveLens(number_of_lenses,
+                                    lens_space,
+                                    lens_radius,
+                                    refractive_decrement,
+                                    magnification)
+        hkl = np.array([0, 0, 2])
+        lambda_0 = 0.71
+        energy = laue.angstrom_to_keV(lambda_0)
+
+        # Instantiate an AL crystal
+        unit_cell = [4.0493, 4.0493, 4.0493, 90., 90., 90.]
+        orientation = np.eye(3, 3)
+        crystal = Crystal(unit_cell, orientation)
+
+        # remount the crystal to align Q with z-axis
+        crystal.align(hkl, axis=np.array([0, 0, 1]))
+        crystal.remount() # this updates U.
+
+        # Find the reflection with goniometer motors.
+        theta, eta = crystal.bring_to_bragg(hkl, energy)
+
+        # Bring the CRL to diffracted beam.
+        crl.goto(theta, eta)
+
+        # Discretize the crystal
+        xg = np.linspace(-150*0.02, 150*0.02, 601)
+        yg = np.linspace(-150*0.02, 150*0.02, 601)
+        zg = np.linspace(-0.05, 0.05, 1)
+        zg = zg*0
+        X, Y, Z = np.meshgrid(xg, yg, zg, indexing='ij')
+        defgrad = self.linear_y_gradient_field(X.shape)
+        crystal.discretize(X, Y, Z, defgrad)
+
+        # Q_lab and gamma_C corresponds to:
+        # hkl = 002 and cubic AL, a = 4.0493 with U=I
+        # After bringing these to Bragg conditions..
+
+        # -5.44137060e-01 -1.90025011e-16  3.05526733e+00]
+        #Q_lab = np.array([-5.44137060e-01 ,-1.90025011e-16 , 3.05526733e+00])
+        Q_lab = crystal.goniometer.R @ crystal.UB_0 @ hkl
+
+        # Beam divergence params
+        gamma_N = np.eye(3, 3)
+        desired_FWHM_N = 0.53*1e-3
+        kappa_N = np.log(2)/(1-np.cos((desired_FWHM_N)/2.))
+        beta_N  = 0
+
+        # Beam wavelength params
+        sigma_e = 1.4*1e-4
+        epsilon = np.random.normal(0, sigma_e, size=(20000,))
+        random_energy = energy + epsilon*energy
+        sigma_lambda = laue.keV_to_angstrom(random_energy).std()
+        mu_lambda = lambda_0
+
+        # CRL acceptance params
+        gamma_C = crl.imaging_system
+        desired_FWHM_C = 0.731*1e-3
+        kappa_C = np.log(2)/(1-np.cos((desired_FWHM_C)/2.))
+        beta_C  = 0
+
+        resolution_function = DualKentGauss(
+                            gamma_C,
+                            kappa_C,
+                            beta_C,
+                            gamma_N,
+                            kappa_N,
+                            beta_N,
+                            mu_lambda,
+                            sigma_lambda,
+                            )
+
+        resolution_function.compile(Q_lab,
+                                    resolution=(8*1e-4, 8*1e-4, 8*1e-4),
+                                    ranges=(3.5, 3.5, 3.5),
+                                    number_of_samples=5000)
+
+        print(resolution_function.p_Q.max())
+
+
+        pixel_y_size = pixel_z_size = 1
+        npix_y = npix_z = 88
+        detector = Detector(pixel_y_size, pixel_z_size, npix_y, npix_z)
+
+        #crystal.goniometer.relative_move(dchi = np.radians(0.01))
+        #crystal.goniometer.relative_move(dphi = np.radians(0.07))
+
+        crystal.goniometer.relative_move(dphi = -np.radians(0.029))
+
+        beam = GaussianBeam(y_std=1e8, z_std=0.125, energy=energy)
+
+        import cProfile
+        import pstats
+        import time
+        pr = cProfile.Profile()
+        pr.enable()
+        t1 = time.perf_counter()
+        im = crystal.diffract(hkl,
+                         resolution_function,
+                         crl,
+                         detector,
+                         beam
+                        )
+        t2 = time.perf_counter()
+        pr.disable()
+        pr.dump_stats('tmp_profile_dump')
+        ps = pstats.Stats('tmp_profile_dump').strip_dirs().sort_stats('cumtime')
+        ps.print_stats(15)
+        print('\n\nCPU time is : ', t2-t1, 's')
+
+        plt.figure()
+        plt.imshow(im, cmap='gray')
+        plt.show()
+
+    def linear_y_gradient_field(self, shape):
+        # Linear strain gradient in zz-component moving across y.
+        F = self.unity_field(shape)
+        deformation_range = np.linspace(-0.003, 0.003, shape[1])
+        for i in range(len(deformation_range)):
+            F[:, i, :, 2, 2] += deformation_range[i]
+        return F
 
     def unity_field(self, shape):
         field = np.zeros((*shape, 3, 3))

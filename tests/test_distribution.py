@@ -7,6 +7,7 @@ from darkmod.distribution import UniformSpherical
 from darkmod.distribution import UniformSphericalCone
 from darkmod.distribution import Normal
 from darkmod.distribution import Kent
+from darkmod.distribution import TruncatedNormal
 
 
 class TestUniformSpherical(unittest.TestCase):
@@ -81,7 +82,7 @@ class TestUniformSphericalCone(unittest.TestCase):
         np.testing.assert_allclose(result, expected_result, atol=1e-6)
 
 
-class TestUniformNormal(unittest.TestCase):
+class TestNormal(unittest.TestCase):
 
     def setUp(self):
         self.mu = -1.9236
@@ -142,6 +143,54 @@ class TestUniformNormal(unittest.TestCase):
         expected_result = np.sqrt(2 * np.pi * self.sigma**2)
         self.assertAlmostEqual(result, expected_result, places=6)
 
+
+class TestTruncatedNormal(unittest.TestCase):
+
+    def setUp(self):
+        self.DEBUG=False
+        self.sigma = 1.15730
+        self.a, self.b = -1.3, 1.6 
+        self.mu = self.a + (self.b - self.a)/2.
+        self.truncated_normal = TruncatedNormal(self.mu, self.sigma, self.a, self.b)
+        self.number_of_samples = 30000
+        self.samples = self.truncated_normal.sample(self.number_of_samples)
+
+        if self.DEBUG:
+            plt.figure()
+            plt.hist(self.samples, bins = self.number_of_samples//1000 )
+            print(self.mu)
+            plt.vlines(self.mu, 0, 1000, color='r')
+
+            plt.figure()
+            x = np.linspace(2*self.a, 2*self.b, 256)
+            y = self.truncated_normal(x, normalise=True, log=False)
+            y2 = np.exp(-0.5 * (x-self.mu)**2 / (self.sigma**2) )
+            c2 = np.sqrt(np.pi*2*self.sigma*self.sigma)
+            plt.plot(x,y)
+            plt.plot(x,y2/c2, 'r--')
+            plt.show()
+
+    def test_sample_shape(self):
+        # Test if the sample method returns the correct shape
+        self.assertEqual(self.samples.shape, (self.number_of_samples,))
+
+    def test_call_method_normalised(self):
+        # Test the __call__ method when normalise=True and log=False
+        x = np.array([0.0, 1.0, 2.0])
+        result = self.truncated_normal(x, normalise=True, log=False)
+        expected_result = np.exp(-0.5 * (x-self.mu)**2 / (self.sigma**2) )
+        expected_result[2] = 0
+        expected_result = expected_result / expected_result[0]
+        result = result / result[0]
+        np.testing.assert_allclose(result, expected_result, atol=1e-6)
+
+    def test_norm_factor(self):
+        # Test that the normalisation constant is smaller than for 
+        # a normal distirbution.
+        x = np.array([0.0, 1.0, 2.0])
+        c1 = self.truncated_normal._norm_factor()
+        c2 = np.sqrt(np.pi*2*self.sigma*self.sigma)
+        self.assertGreater(c2, c1)
 
 class TestUniformKent(unittest.TestCase):
 

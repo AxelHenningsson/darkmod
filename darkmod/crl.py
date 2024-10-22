@@ -37,6 +37,27 @@ class CompundRefractiveLens(object):
         self.theta = theta
         self.eta = eta
 
+    def refract(self, x):
+        """Map lab coordinates (downstream of crl) to the image plane through refraction.
+
+        It is assumed that all coordinates `x` lie at distance d1 from the crl. I.e
+        assumed to lie in the object plane. When this is not true, there exist an error
+        in the mapped coordinates that scales with d1-dtrue.
+
+        Args:
+            x (:obj:`numpy array`): 3D lab coordinates downstreams of crl lens. shape=(3,n).
+
+        Returns:
+            (:obj:`numpy array`): Mapped coordinates. shape=(3,n).
+        """
+        # TODO: add spatial origin considerations.
+        oa = self.optical_axis
+        projection_matrix = np.eye(3,3) - np.outer(oa, oa) # maps to object plane.
+        x_mapped = self.imaging_system.T @ (projection_matrix @ x)
+        x_mapped = -self.magnification*x_mapped
+        x_mapped[0, :] = self.source_to_detector_distance
+        return self.imaging_system @ x_mapped
+
     @property
     def optical_axis(self):
         """optical axis for the current angles (as given in lab coordinates).

@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.ndimage import gaussian_filter
 
 class Detector(object):
 
@@ -9,12 +10,12 @@ class Detector(object):
         self.npix_y = npix_y
         self.npix_z = npix_z
 
-        self._det_yhat = None
-        self._det_zhat = None
-
-    def render(self, dety, detz, intensity):
+    def render(self, y, z, intensity):
         image = np.zeros((self.npix_y, self.npix_z))
-        # interpolate the scattered data, dety, detz, intensity, to a grid..
+        yi = ( (-y/self.pixel_y_size) + (self.npix_y//2) ).astype(int)
+        zi = ( (-z/self.pixel_z_size) + (self.npix_z//2) ).astype(int)
+        np.add.at( image, (zi, yi),  intensity)
+        #image = gaussian_filter(image, sigma=1.0)
         return image
 
 if __name__ == "__main__":

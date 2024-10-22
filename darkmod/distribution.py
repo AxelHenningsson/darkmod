@@ -2,8 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.transform import Rotation
 from scipy.special import gamma as gamma_function
-from scipy.special import iv
-
+from scipy.special import iv, erf
 
 class UniformSpherical:
     """
@@ -164,6 +163,228 @@ class Normal:
 
     def _norm_factor(self):
         return np.sqrt(np.pi*2*self.sigma*self.sigma)
+
+
+class TruncatedNormal:
+    """
+    Truncated Gaussian distribution.
+
+    Args:
+        mu (:obj:`float`): Mean value.
+        sigma (:obj:`float`): Standard deviation.
+        a (:obj:`float`): Lower truncation bound.
+        b (:obj:`float`): Upper truncation bound.
+    """
+
+    def __init__(self, mu, sigma, a, b):
+        assert sigma > 0
+        assert a < b
+        self.mu = mu
+        self.sigma = sigma
+        self.a = a
+        self.b = b
+
+    def __call__(self, x, normalise=True, log=False):
+        """
+        Truncated Gaussian PDF - likelihood of observing x.
+
+        Args:
+            x (:obj:`np.ndarray`): A shape (N,) array of probe locations.
+            normalise (:obj:`bool`): If true; normalise the distribution. Defaults to True.
+            log (:obj:`bool`): If true; return a log probability. Defaults to False.
+
+        Returns:
+            :obj:`float`: Likelihood of the given x.
+        """
+        log_exp = self._log_truncated_pdf(x)
+        if normalise and not log:
+            return np.exp(log_exp) / self._norm_factor()
+        elif normalise and log:
+            return log_exp - np.log(self._norm_factor())
+        elif not normalise and not log:
+            return np.exp(log_exp)
+        elif not normalise and log:
+            return log_exp
+
+    def sample(self, number_of_samples):
+        """
+        Generate a sample from the Truncated Normal Distribution.
+
+        NOTE: This function implements simple rejection sampling using a Gaussian
+        prior. Improvements can easily be made if speed becomes relevant.
+
+        Args:
+            number_of_samples (:obj:`int`): Number of samples to generate.
+
+        Returns:
+            :obj:`np.ndarray`: A sample of shape (number_of_samples,) from the Truncated Normal distribution.
+        """
+        samples = np.array([])
+        while len(samples) < number_of_samples:
+            s = np.random.normal(self.mu, self.sigma, size=(number_of_samples,))
+            m = (self.a < s) * (self.b > s)
+            samples = np.concatenate((samples, s[m]))
+        return samples[0:number_of_samples]
+
+    def _log_truncated_pdf(self, x):
+        s2 = 2 * self.sigma * self.sigma
+        dx = (x - self.mu)
+        log_exp = - dx * dx / s2
+        m = (self.a < x) * (self.b > x)
+        log_exp[~m] = -np.inf
+        return log_exp
+
+    def _cdf(self, x):
+        """Cumulative distribution function for a normal.
+        """
+        z = (x - self.mu) / self.sigma
+        return 0.5 * ( 1 + erf( z / np.sqrt(2) ) )
+
+    def _norm_factor(self):
+        """Factor such that exp(...)/factor is integrates to 1 on a to b.
+        """
+        return np.sqrt(np.pi*2)*self.sigma*(self._cdf(self.b) - self._cdf(self.a))
+
+
+
+
+class MultivariateTruncatedNormal(object):
+    """
+    Multivariate Gaussian distribution.
+
+    Args:
+        mu (:obj:`float`): Mean vector. shape=(n,).
+        cov (:obj:`float`): Covariance matrix. shape=(n,n).
+        a (:obj:`float`): Lower truncation bounds. shape=(n,).
+        b (:obj:`float`): Upper truncation bounds. shape=(n,).
+
+    NOTE: This class does not implement PDF normalisation.
+
+    """
+
+    def __init__(self, mu, cov, a, b):
+        assert cov.shape[0] == mu.shape[0], 'covariance and mean shape do not match'
+        assert cov.shape[0] == cov.shape[1], 'covariance is not square'
+        assert np.linalg.matrix_rank(cov) == len(mu), 'ill conditioned covariance'
+        assert np.linalg.cond(cov) < 1e12, 'ill conditioned covariance'
+        assert np.allclose(cov, cov.T), 'Covariance is not symmetric'
+        self.mu = mu
+        self.cov = cov
+        self._cov_inv = np.linalg.inv(cov)
+        self.a = a
+        self.b = b
+
+    def __call__(self, x, log=False):
+        """
+        The non-normalised Multivariate Truncated aussian PDF.
+
+        NOTE: this class does not implement PDF normalisation.
+
+        Args:
+            x (:obj:`np.ndarray`): Array of probe locations. Each column is a
+                probe locaiton. shape=(dim, number_of_probe_locations).
+            log (:obj:`bool`): if true; return a log probability. Defaults to False.
+
+        Returns:
+            :obj:`float`: Likelihood of the given x.
+        """
+        log_exp = self._log_mult_trunc_gauss_pdf(x)
+        if log:
+            return log_exp
+        else:
+            return np.exp(log_exp)
+
+    def _is_supported(self, sample):
+        ub = np.all( sample < self.b, axis=0 )
+        lb = np.all( sample > self.a, axis=0 ) 
+        return ub & lb
+
+    def sample(self, number_of_samples):
+        """
+        Generate a sample from the multivariate Normal Distribution.
+
+        Args:
+            number_of_samples (:obj:`int`): Number of samples to generate.
+
+        Returns:
+            :obj:`np.ndarray`: Sample from a multivariate Gaussian. shape=(n, number_of_samples).
+        """
+        sample = np.random.multivariate_normal(self.mu, cov=self.cov, size=(number_of_samples,)).T
+        x = sample[:, self._is_supported(sample)]
+        while x.shape[1] < number_of_samples:
+            sample = np.random.multivariate_normal(self.mu, cov=self.cov, size=(number_of_samples,)).T
+            x = np.concatenate((x, sample[:, self._is_supported(sample)]), axis=1)
+        return x[:, 0:number_of_samples]
+
+    def _log_mult_trunc_gauss_pdf(self, x):
+        dx = (x - self.mu[:, np.newaxis])
+        exponent = -0.5 * np.sum( dx * (self._cov_inv @ dx), axis=0)
+        exponent[np.any( x < self.a, axis=0)] = -np.inf
+        exponent[np.any( x > self.b, axis=0)] = -np.inf
+        return exponent
+
+
+class MultivariateNormal(object):
+    """
+    Multivariate Gaussian distribution.
+
+    Args:
+        mu (:obj:`float`): Mean vector. shape=(n,).
+        cov (:obj:`float`): Covariance matrix. shape=(n,n).
+    """
+
+    def __init__(self, mu, cov):
+        assert cov.shape[0] == mu.shape[0], 'covariance and mean shape do not match'
+        assert cov.shape[0] == cov.shape[1], 'covariance is not square'
+        assert np.linalg.matrix_rank(cov) == len(mu), 'ill conditioned covariance'
+        assert np.linalg.cond(cov) < 1e12, 'ill conditioned covariance'
+        assert np.allclose(cov, cov.T), 'Covariance is not symmetric'
+        self.mu = mu
+        self.cov = cov
+        self._cov_inv = np.linalg.inv(cov)
+
+    def __call__(self, x, normalise=True, log=False):
+        """
+        Multivariate Gaussian PDF - i.e the likelihood of observing x.
+
+        Args:
+            x (:obj:`np.ndarray`): Array of probe locations. Each column is a
+                probe locaiton. shape=(dim, number_of_probe_locations).
+            normalise (:obj:`bool`): if true; normalise the distribution. Defaults to True.
+            log (:obj:`bool`): if true; return a log probability. Defaults to False.
+
+        Returns:
+            :obj:`float`: Likelihood of the given x.
+        """
+        log_exp = self._log_mult_gauss_pdf(x)
+        if normalise and not log:
+            return np.exp(log_exp) / self._norm_factor()
+        elif normalise and log:
+            return log_exp - np.log(self._norm_factor())
+        elif not normalise and not log:
+            return np.exp(log_exp)
+        elif not normalise and log:
+            return log_exp
+
+    def sample(self, number_of_samples):
+        """
+        Generate a sample from the multivariate Normal Distribution.
+
+        Args:
+            number_of_samples (:obj:`int`): Number of samples to generate.
+
+        Returns:
+            :obj:`np.ndarray`: Sample from a multivariate Gaussian. shape=(n, number_of_samples).
+        """
+        size = (len(self.mu), number_of_samples)
+        return np.random.multivariate_normal(self.mu, cov=self.cov, size=(number_of_samples,)).T
+
+    def _log_mult_gauss_pdf(self, x):
+        dx = (x - self.mu[:, np.newaxis])
+        return -0.5 * np.sum( dx * (self._cov_inv @ dx), axis=0)
+
+    def _norm_factor(self):
+        return np.sqrt( (2 * np.pi)**len(self.mu) * np.linalg.det(self.cov))
 
 
 class Kent:

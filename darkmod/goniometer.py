@@ -38,29 +38,43 @@ class Goniometer:
     def goto(self, phi=None, chi=None, omega=None, mu=None, rotation=None):
         """Move the goniometer to specified angles.
 
-        Either give angles phi, chi, omega, mu or a scipy.spatial.transform.Rotation
-        from which angles will be computed such that omega=0.
-
-        NOTE: When passing a :obj:`scipy.spatial.transform.Rotation` the angles
-            phi, chi and mu will not in general be as small as possible.
+        Either directly give angles phi, chi, omega, mu or, alternatively,
+        a scipy.spatial.transform.Rotation or rotation matrix from which
+        angles (phi, chi, omega, mu) will be computed such that phi=0.
 
         Args:
             phi (:obj:`float`): Phi angle in radians (top rock - y rotation).
             chi (:obj:`float`): Chi angle in radians (top roll - x rotation).
             omega (:obj:`float`): Omega angle in radians (around Q-vector - z rotation).
             mu (:obj:`float`): Mu angle in radians (bottom roll - x rotation).
-            rotation (:obj:`scipy.spatial.transform.Rotation`): set the goniometer angles to
-                correspond to an element of SO3 (a rotation).
+            rotation (:obj:`scipy.spatial.transform.Rotation` or :obj:`numpy array`): set
+                the goniometer angles to correspond to an element of SO3 (a rotation).
+                WIther a rotaiton object or a 3x3 rotation matrix.
 
         """
         if rotation is not None:
-            axes = np.array([self._yhat_lab, self._xhat_lab, self._yhat_lab]) # Phi then Chi then Mu
-            phi, chi, mu = Rotation.as_davenport( rotation, axes, order='extrinsic')
-            self.phi, self.chi, self.omega, self.mu = phi, chi, 0, mu
+            self.phi, self.chi, self.omega, self.mu = self._rotation_to_motor_angles(rotation)
         elif None not in (phi, chi, omega, mu):
             self.phi, self.chi, self.omega, self.mu = phi, chi, omega, mu
         else:
             raise ValueError('Either pass a scipy.spatial.transform.Rotation or 4 floats: phi, chi, omega, mu.')
+
+    def _rotation_to_motor_angles(self, rotation):
+        """Convert a rotation element into goniometer motor angles.
+
+        Args:
+            rotation (:obj:`scipy.spatial.transform.Rotation` or :obj:`numpy array`): set
+                the goniometer angles to correspond to an element of SO3 (a rotation).
+                WIther a rotaiton object or a 3x3 rotation matrix.
+
+        Returns:
+            :obj:`tuple` of :obj:`float`: Motor setting, phi, chi, omega, mu.
+        """
+        if isinstance(rotation, np.ndarray):
+            rotation = Rotation.from_matrix(rotation)
+        axes = np.array([self._xhat_lab, self._zhat_lab, self._yhat_lab]) # Phi then Chi then Mu
+        chi, omega, mu = Rotation.as_davenport(rotation, axes, order='extrinsic')
+        return 0, chi, omega, mu
 
     @property
     def R(self):
