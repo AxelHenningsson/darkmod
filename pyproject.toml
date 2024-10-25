@@ -18,4 +18,5 @@ dependencies = ["numpy",
 "pandas",
 "xfab",
 "dfxm",
+"astra",
 ]

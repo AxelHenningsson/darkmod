@@ -38,7 +38,7 @@ class CompundRefractiveLens(object):
         self.eta = eta
 
     def refract(self, x):
-        """Map lab coordinates (downstream of crl) to the image plane through refraction.
+        """Map lab coordinates (upstream of crl) to the image plane through refraction.
 
         It is assumed that all coordinates `x` lie at distance d1 from the crl. I.e
         assumed to lie in the object plane. When this is not true, there exist an error

@@ -916,6 +916,8 @@ if __name__ == "__main__":
 
 
     if 1:
+
+        plt.style.use('dark_background')
         import cProfile
         import pstats
         import time
@@ -1009,12 +1011,14 @@ if __name__ == "__main__":
     # qy /= np.linalg.norm(Q)
     # qz /= np.linalg.norm(Q)
 
+    alpha = 0.1
+
     print('Cov', (np.cov(np.array([qx, qy, qz]))*1e6).round(3) )
     ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(0.2 + qx*1e3, qy*1e3, qz*1e3, alpha=0.05, label='No-truncation')
-    ax.scatter(0.2 + qx*1e3, qy*1e3, -15, alpha=0.05)
-    ax.scatter(0.2 + qx*1e3, 15, qz*1e3, alpha=0.05)
-    ax.scatter(5.5, qy*1e3, qz*1e3, alpha=0.05)
+    ax.scatter(0.2 + qx*1e3, qy*1e3, qz*1e3, alpha=alpha, label='No-truncation')
+    ax.scatter(0.2 + qx*1e3, qy*1e3, -15, alpha=alpha)
+    ax.scatter(0.2 + qx*1e3, 15, qz*1e3, alpha=alpha)
+    ax.scatter(5.5, qy*1e3, qz*1e3, alpha=alpha)
 
     samples2 -= np.mean(samples2, axis=1).reshape(3,1)
     qx, qy, qz = lab_to_Q(samples2, Q)
@@ -1023,10 +1027,10 @@ if __name__ == "__main__":
     # qz /= np.linalg.norm(Q)
 
     print('Cov', (np.cov(np.array([qx, qy, qz]))*1e6).round(3) )
-    ax.scatter(-5.3 + qx*1e3, qy*1e3, qz*1e3, alpha=0.05, label='Truncation')
-    ax.scatter(-5.3 + qx*1e3, qy*1e3, -15, alpha=0.05)
-    ax.scatter(-5.3 + qx*1e3, 15, qz*1e3, alpha=0.05)
-    ax.scatter(5.5, qy*1e3, qz*1e3, alpha=0.05)
+    ax.scatter(-5.3 + qx*1e3, qy*1e3, qz*1e3, alpha=alpha, label='Truncation')
+    ax.scatter(-5.3 + qx*1e3, qy*1e3, -15, alpha=alpha)
+    ax.scatter(-5.3 + qx*1e3, 15, qz*1e3, alpha=alpha)
+    ax.scatter(5.5, qy*1e3, qz*1e3, alpha=alpha)
 
     ax.set_xlabel('$q_{rock}$')
     ax.set_ylabel('$q_{roll}$')
