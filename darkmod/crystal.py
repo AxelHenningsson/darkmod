@@ -32,7 +32,7 @@ class Crystal(object):
 
     def __init__(self, unit_cell, orientation):
         """A spatilally extended crystal.
-    
+
         Args:
             unit_cell (:obj:`iterable`): Reference unit cell parameters (undeformed state). unit_cell=[a,b,c,alpha,beta,gamma].
             orientation (:obj:`numpy array`): Reference orientation matrix (undeformed state), shape=(3,3).
@@ -372,35 +372,50 @@ class Crystal(object):
 
         return df
 
+    def _get_angular_shifts(self, crl):
+        # TODO: this needs unit tets badly..
+        # TODO: should this be in the crl class and take an array
+        # of lab x coordinates.
+        x_lab_at_goni = self.goniometer.R @ self._x
+        x_imaging_at_goni = crl.imaging_system.T @ x_lab_at_goni
+        v = x_imaging_at_goni - crl.d1 * np.array([1, 0, 0]).reshape(3, 1)
+        v = v / np.linalg.norm(v, axis=0)
+        rotaxes = np.array(
+            [
+                v[1] * (-np.array([1, 0, 0])[2]) - v[2] * (-np.array([1, 0, 0])[1]),
+                v[2] * (-np.array([1, 0, 0])[0]) - v[0] * (-np.array([1, 0, 0])[2]),
+                v[0] * (-np.array([1, 0, 0])[1]) - v[1] * (-np.array([1, 0, 0])[0]),
+            ]
+        )
+        rotaxes = rotaxes / np.linalg.norm(rotaxes, axis=0)
+        angles = np.arccos(-np.array([1, 0, 0]) @ v)
+        rot = Rotation.from_rotvec((rotaxes * angles).T)
+        vertical, horizontal, _ = rot.as_davenport(
+            axes=np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]]), order="extrinsic"
+        ).T
+        return np.array( [horizontal, vertical] )
+
     def diffract(self, hkl, resolution_function, crl, detector, beam):
-
         Q_lab = self.get_Q_lab(hkl)
-        Q_lab_flat = Q_lab.reshape(self._flat_vector_shape)
-        p_Q = resolution_function(Q_lab_flat.T)
+        Q_lab_flat = Q_lab.reshape(self._flat_vector_shape).T
+        angular_crl_shifts = self._get_angular_shifts(crl)
+        p_Q = resolution_function(Q_lab_flat, angular_crl_shifts=angular_crl_shifts)
 
-        R = self.goniometer.R
-        x_lab_at_goni = R @ self._x
-        w = beam(x_lab_at_goni)
+        #p_Q_1 = resolution_function(Q_lab_flat, angular_crl_shifts=None)
+        #dd = (p_Q / p_Q_1).reshape(self._grid_scalar_shape)
+        # plt.style.use('dark_background')
+        # fig, ax = plt.subplots(1, 1, figsize=(7,7))
+        # dd = angular_crl_shifts[1].reshape(self._grid_scalar_shape)
+        # im = ax.imshow(np.abs(dd[dd.shape[0]//2,:,:]-1))
+        # #im = ax.imshow(dd[:, dd.shape[1]//2,:])
+        # #im = ax.imshow(np.abs(dd[:,:,dd.shape[2]//2]-1))
+        # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        # plt.tight_layout()
+        # plt.show()
+    
+        w = beam(self.goniometer.R @ self._x)
         voxel_volume = (p_Q * w).reshape(self._grid_scalar_shape)
-
-        image = detector.render(voxel_volume, self.voxel_size, crl, R)
-
-        # TODO: We need to add the shifts to the resolution function
-        # due to points not being at the imaging origin.
-        # dq = D @ x_lab_at_goni
-        # p_Q = resolution_function(Q_lab_flat.T + dq)
-        # the D matrix will here be a 3x3 transformation dependent on theta
-        # and gamma, it should likely be implemented in the crl at least
-        # the gamma. Then perhaps the shift should be here.
-
-        if 0:
-            plt.figure(figsize=(8, 6))
-            plt.scatter(x_lab_at_goni[0, 0::10], x_lab_at_goni[2, 0::10], c=p_Q[0::10])
-            plt.grid(True)
-            plt.axis("equal")
-            plt.show()
-
-        return image
+        return detector.render(voxel_volume, self.voxel_size, crl, self.goniometer.R)
 
 
 if __name__ == "__main__":
@@ -433,8 +448,8 @@ if __name__ == "__main__":
         return F
 
     number_of_lenses = 50
-    lens_space = 2 * 1e-3
-    lens_radius = 50 * 1e-6
+    lens_space = 2000  # microns
+    lens_radius = 50  # microns
     refractive_decrement = 1.65 * 1e-6
     magnification = 10
     crl = CompundRefractiveLens(
@@ -465,7 +480,7 @@ if __name__ == "__main__":
     zg = np.linspace(-3, 3, 64)  # microns
     dx = xg[1] - xg[0]
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
-    defgrad = linear_y_gradient_field(X.shape)
+    defgrad = unity_field(X.shape)#linear_y_gradient_field(X.shape)
     crystal.discretize(X, Y, Z, defgrad)
 
     # import vtk
@@ -538,6 +553,8 @@ if __name__ == "__main__":
     #     ranges=(3.5, 3.5, 3.5),
     #     number_of_samples=5000,
     # )
+
+    # TODO: tets with the truncated version.
     resolution_function = PentaGauss(
         crl.optical_axis,
         desired_FWHM_N / (2 * np.sqrt(2 * np.log(2))),
@@ -551,9 +568,9 @@ if __name__ == "__main__":
     resolution_function.compile(Q_lab)
 
     # Detector size
-    det_row_count = 1024
-    det_col_count = 1024
-    pixel_size = dx
+    det_row_count = 512
+    det_col_count = 512
+    pixel_size = 2*dx
     print("pixel_size", pixel_size)
 
     detector = Detector.wall_mount(
@@ -571,8 +588,15 @@ if __name__ == "__main__":
     t1 = time.perf_counter()
 
     # crystal.goniometer.relative_move(dchi = np.radians(0.815))
-    # crystal.goniometer.relative_move(dphi = np.radians(0.81/200))
+    crystal.goniometer.relative_move(dphi = -10*np.radians(0.005))
     image = crystal.diffract(hkl, resolution_function, crl, detector, beam)
+    if 0:
+        rc = []
+        for i in range(30):
+            crystal.goniometer.relative_move(dphi = np.radians(0.0025))
+            image = crystal.diffract(hkl, resolution_function, crl, detector, beam)
+            rc.append(image.sum())
+            print(i)
 
     t2 = time.perf_counter()
     pr.disable()
@@ -581,10 +605,15 @@ if __name__ == "__main__":
     ps.print_stats(15)
     print("\n\nCPU time is : ", t2 - t1, "s")
 
+    # plt.figure(figsize=(8,6))
+    # plt.plot(np.radians(np.linspace(-0.05, 0.0, 30))*1e3, rc)
+    # plt.grid(True)
+    # plt.show()
+
     plt.style.use("dark_background")
     fig, ax = plt.subplots(1, 1, figsize=(7, 7))
-    if np.max(image) != 0:
-        image = image / np.max(image)
+    #if np.max(image) != 0:
+    #    image = image / np.max(image)
     im = ax.imshow(image, cmap="gray", vmin=0, vmax=1)
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     plt.tight_layout()

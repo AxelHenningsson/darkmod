@@ -455,7 +455,7 @@ class PentaGauss(object):
         self.cov_Q_lab = M @ self._cov_x @ M.T
         self._p_Q = MultivariateNormal(self.Q, self.cov_Q_lab)
 
-    def __call__(self, Q_vectors):
+    def __call__(self, Q_vectors, angular_crl_shifts=None):
         """
         Calculate the likelihood of a set of Q vectors.
 
@@ -469,7 +469,16 @@ class PentaGauss(object):
         if self.Q is None:
             raise ValueError('The resolution function requires compiling before any calls can be made to the PDF.')
         else:
-            return self._p_Q(Q_vectors)
+            if angular_crl_shifts is not None:
+                dQ = self._get_Q_shifts(angular_crl_shifts)
+                return self._p_Q(Q_vectors + dQ)
+            else:
+                return self._p_Q(Q_vectors)
+    
+    def _get_Q_shifts(self, angular_crl_shifts):
+        M = self._get_M()
+        dQ = M[:,-2:] @ angular_crl_shifts
+        return dQ
 
     def _get_M(self):
         """Vectorization of Poulsen 2017, dQ = M @ x.
