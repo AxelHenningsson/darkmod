@@ -126,7 +126,7 @@ class GpuProjector(object):
 
         # 3D center coordinates of the detector
         detector_center = (
-            d0 + (dy * self.det_col_count / 2.0 ) + (dz * self.det_row_count / 2.0)
+            d0 + (dy * self.det_col_count / 2.0) + (dz * self.det_row_count / 2.0)
         )
 
         # vector from pixel (0,0) to (0,1) i.e detector cols
@@ -145,24 +145,26 @@ if __name__ == "__main__":
     data = np.zeros((128, 128, 128), dtype=np.float32)
     pn, wn = 15, 4
 
-    data[data.shape[0] // 2 , data.shape[1] // 2 - wn : data.shape[1] // 2 + wn, wn:-wn] = np.linspace(
-        1, 4, data.shape[2] - 2*wn
+    data[
+        data.shape[0] // 2, data.shape[1] // 2 - wn : data.shape[1] // 2 + wn, wn:-wn
+    ] = np.linspace(
+        1, 4, data.shape[2] - 2 * wn
     )  # z-axis
     for i in range(pn):
         data[
-            data.shape[0] // 2 ,
+            data.shape[0] // 2,
             data.shape[1] // 2 - pn + i : data.shape[1] // 2 + pn - i,
             data.shape[2] - pn + i,
         ] = 4  # z
 
-    data[data.shape[0] // 2 , wn:-wn, data.shape[2] // 2 - wn : data.shape[2] // 2 + wn] = np.linspace(
-        4, 7, data.shape[1] - 2*wn
-    )[
+    data[
+        data.shape[0] // 2, wn:-wn, data.shape[2] // 2 - wn : data.shape[2] // 2 + wn
+    ] = np.linspace(4, 7, data.shape[1] - 2 * wn)[
         :, np.newaxis
     ]  # y-axis
     for i in range(pn):
         data[
-            data.shape[0] // 2 ,
+            data.shape[0] // 2,
             data.shape[1] - pn + i,
             data.shape[2] // 2 - pn + i : data.shape[2] // 2 + pn - i,
         ] = 7  # y
@@ -171,11 +173,11 @@ if __name__ == "__main__":
     det_row_count = 256
     det_col_count = 256
     voxel_size = 1
-    pixel_size = 2.
+    pixel_size = 2.0
 
     # we have the optical axis to project along in lab cooridnates
     theta = np.radians(30)
-    s, c = np.sin(2*theta), np.cos(2*theta)
+    s, c = np.sin(2 * theta), np.cos(2 * theta)
     Ry = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
     optical_axis = Ry.T @ np.array([1, 0, 0])
     ray_direction = optical_axis
@@ -198,12 +200,12 @@ if __name__ == "__main__":
 
     detector_corners = np.array([d0, d1, d2]).T
 
-    a = d1-d0
-    b = d2-d0
+    a = d1 - d0
+    b = d2 - d0
     c = np.cross(a, b)
     c /= np.linalg.norm(c)
     print(c, optical_axis)
-    print(d0-optical_axis*det_col_count)
+    print(d0 - optical_axis * det_col_count)
 
     projector = GpuProjector(
         detector_corners, pixel_size, det_row_count, det_col_count, super_sampling=2

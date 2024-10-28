@@ -854,7 +854,6 @@ if __name__ == "__main__":
     kappa_C = np.log(2)/(1-np.cos((desired_FWHM_C)/2.))
     beta_C  = 0
 
-
     # res = DualKentGauss(
     #                 gamma_C,
     #                 kappa_C,

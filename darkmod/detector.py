@@ -6,6 +6,18 @@ from darkmod.projector import GpuProjector
 
 
 class Detector(object):
+    """A flat surface detector with uniform pixel size.
+
+    Attributes:
+        detector_corners (:obj:`numpy array`): Detector corners, shape=(3,3).
+        pixel_size (:obj:`float`): Pixel size in units of microns.
+        det_row_count (:obj:`int`): Number of pixels along detector columns.
+        det_col_count (:obj:`int`): Number of pixels along detector rows.
+        super_sampling (:obj:`int`): Number of super sampling points in each dimension.
+            Defaults to 1, in which case a single ray integral is ompute for each detector
+            pixel.
+
+    """
 
     def __init__(
         self,
@@ -77,16 +89,54 @@ class Detector(object):
             super_sampling,
         )
 
-    def render(self, voxel_volume, voxel_size, crl):
+    def render(
+        self,
+        voxel_volume,
+        voxel_size,
+        crl,
+        sample_rotation=np.eye(3),
+    ):
+        """_summary_
 
-        image = self._projector(
+        Args:
+            voxel_volume (:obj:`np.ndarray`): The sample voxel volume with the scalar 
+                diffracted intensity in each voxel. shape=(m,n,o).
+            voxel_size (_type_): voxel size in microns.
+            crl (obj:`darkmod.crl.CompoundRefractiveLens`): The crl.
+            sample_rotation (:obj:`np.ndarray`): The rotaiton matrix that brings sample vectors
+                to lab frame. I.e the goniometer setting. Defaults to np.eye(3) in which case
+                sample and lab frames are considered to be aligned. shape=(3,3).
+
+        Returns:
+            _type_: The detector image
+        """
+
+        # The backrotation of the detector by the goniometer setting simulates the
+        # fact that the sample and lab coordinate systems are not aligned. I.e the 
+        # sample voxel_volume is tilted. We bring the geomtry to the sample frame.
+        # This is a compatability requirement for the projector, which does not
+        # support rotated volumes. Also, this is faster than rotating all the voxels
+        # in the volume, here we require to only rotate the optical axis and the
+        # detector corners.
+        self._projector.detector_corners = sample_rotation.T @ self.detector_corners
+        ray_direction = sample_rotation.T @ crl.optical_axis
+
+        # The CRL will magnify the sample voxel_volume. We simulate this by passing 
+        # a virtual voxel size to the projector, scaled by the crl magnification.
+        magnified_voxel_size = (voxel_size * crl.magnification)
+
+        # The voxel volume can now be tomographically ray-traced along the 
+        # diffracted ray_direction resultingin a detector image.
+        detector_image = self._projector(
             voxel_volume,
-            voxel_size * crl.magnification,
-            crl.optical_axis,
+            magnified_voxel_size,
+            ray_direction,
         )
 
-        return np.flipud(np.fliplr(image))
+        # The resulting image should be inverted due to the CRL lens effect.
+        detector_image = np.flipud(np.fliplr(detector_image))
 
+        return detector_image
 
 def _get_det_corners_wall_mount(
     crl,
@@ -111,9 +161,9 @@ def _get_det_corners_orthogonal_mount(
 ):
     y = np.array([0, 1, 0])
     z = np.array([0, 0, 1])
-    theta = np.arccos(crl.optical_axis[0]) / 2.
-    s, c = np.sin(2*theta), np.cos(2*theta)
-    Ry = np.array([[c,0,s],[0,1,0],[-s,0,c]])
+    theta = np.arccos(crl.optical_axis[0]) / 2.0
+    s, c = np.sin(2 * theta), np.cos(2 * theta)
+    Ry = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
     zim = Ry.T @ z
 
     dr = pixel_size * det_row_count / 2.0
@@ -131,32 +181,32 @@ if __name__ == "__main__":
 
     # data = np.ones((128, 128, 128), dtype=np.float32)
 
-
     data = np.zeros((128, 128, 128), dtype=np.float32)
     pn, wn = 15, 4
 
-    data[data.shape[0] // 2 , data.shape[1] // 2 - wn : data.shape[1] // 2 + wn, wn:-wn] = np.linspace(
-        1, 4, data.shape[2] - 2*wn
+    data[
+        data.shape[0] // 2, data.shape[1] // 2 - wn : data.shape[1] // 2 + wn, wn:-wn
+    ] = np.linspace(
+        1, 4, data.shape[2] - 2 * wn
     )  # z-axis
     for i in range(pn):
         data[
-            data.shape[0] // 2 ,
+            data.shape[0] // 2,
             data.shape[1] // 2 - pn + i : data.shape[1] // 2 + pn - i,
             data.shape[2] - pn + i,
         ] = 4  # z
 
-    data[data.shape[0] // 2 , wn:-wn, data.shape[2] // 2 - wn : data.shape[2] // 2 + wn] = np.linspace(
-        4, 7, data.shape[1] - 2*wn
-    )[
+    data[
+        data.shape[0] // 2, wn:-wn, data.shape[2] // 2 - wn : data.shape[2] // 2 + wn
+    ] = np.linspace(4, 7, data.shape[1] - 2 * wn)[
         :, np.newaxis
     ]  # y-axis
     for i in range(pn):
         data[
-            data.shape[0] // 2 ,
+            data.shape[0] // 2,
             data.shape[1] - pn + i,
             data.shape[2] // 2 - pn + i : data.shape[2] // 2 + pn - i,
         ] = 7  # y
-
 
     number_of_lenses = 50
     lens_space = 2 * 1e-3
@@ -165,13 +215,11 @@ if __name__ == "__main__":
     magnification = 10
 
     from darkmod.crl import CompundRefractiveLens
-    crl = CompundRefractiveLens(number_of_lenses,
-                                lens_space,
-                                lens_radius,
-                                refractive_decrement,
-                                magnification)
-    crl.goto(theta=np.radians(10), eta=0)
 
+    crl = CompundRefractiveLens(
+        number_of_lenses, lens_space, lens_radius, refractive_decrement, magnification
+    )
+    crl.goto(theta=np.radians(10), eta=0)
 
     # Detector size
     det_row_count = 256

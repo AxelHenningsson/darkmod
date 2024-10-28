@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from darkmod.distribution import Normal
+
 
 class HeavysideBeam(object):
     """Represents a Heavyside beam with specified width and energy.
@@ -34,8 +36,11 @@ class HeavysideBeam(object):
         Returns:
             :obj:`numpy.ndarray`: Intensity weight for the given positions.
         """
-        weights = (np.abs(x[1]) < self.y_width//2.) & (np.abs(x[2]) < self.z_width//2.)
+        weights = (np.abs(x[1]) < self.y_width // 2.0) & (
+            np.abs(x[2]) < self.z_width // 2.0
+        )
         return weights
+
 
 class GaussianBeam(object):
     """Represents a Gaussian beam with specified standard deviations and energy.
@@ -59,8 +64,8 @@ class GaussianBeam(object):
         """
         self.y_std = y_std
         self.z_std = z_std
-        self.covariance = np.array([[y_std**2, 0],[0, z_std**2]])
-        self._covi = np.linalg.inv(self.covariance)
+        self._intensity_y = Normal(0, y_std)
+        self._intensity_z = Normal(0, z_std)
         self.energy = energy
 
     def __call__(self, x):
@@ -72,8 +77,7 @@ class GaussianBeam(object):
         Returns:
             :obj:`numpy.ndarray`: Intensity weight for the given positions.
         """
-        weights = np.exp(-0.5 * np.sum( x[1:, :] * (self._covi @ x[1:, :]), axis=0 ))
-        return weights / np.max(weights)
+        return self._intensity_y(x[1])*self._intensity_z(x[2])
 
 
 if __name__ == "__main__":

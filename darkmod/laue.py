@@ -16,7 +16,6 @@ def get_G(U, B, G_hkl):
         B (:obj:`numpy array`): Reciprocal to grain coordinate mapping matrix of ``shape=(3,3)``.
         G_hkl (:obj:`numpy array`): Miller indices, i.e the h,k,l integers (``shape=(3,n)``).
 
-
     Returns:
         G (:obj:`numpy array`): Sample coordinate system diffraction vector. (``shape=(3,n)``)
 
@@ -35,7 +34,7 @@ def get_eta_angle(G, omega, energy, rotation_axis):
         omega (:obj:`numpy array`): Omega table for diffraction, each column is associated with
             a G-vector (``shape=(m,n)``)
         energy (:obj:`float`): Photon energy in keV.
-        rotation_axis (:obj:`numpy array`): Axis of rotation. ``shape=(3,)`
+        rotation_axis (:obj:`numpy array`): Axis of rotation. ``shape=(3,)``
 
 
     Returns:
@@ -86,10 +85,10 @@ def get_b_matrix(unit_cell):
     Calculate B matrix such that B^-T contains the reals space lattice vectors as columns.
 
     Args:
-        unit_cell (:obj:`numpy array`): unit cell parameters [a,b,c,alpha,beta,gamma]. ``shape=(6,)`
+        unit_cell (:obj:`numpy array`): unit cell parameters [a,b,c,alpha,beta,gamma]. ``shape=(6,)``
 
     Returns:
-        B (:obj:`numpy array`): The B matrix. ``shape=(3,3)`
+        B (:obj:`numpy array`): The B matrix. ``shape=(3,3)``
     """
     a, b, c = unit_cell[0:3]
     alpha, beta, gamma = np.radians(unit_cell[3:])
