@@ -80,5 +80,40 @@ class GaussianBeam(object):
         return self._intensity_y(x[1])*self._intensity_z(x[2])
 
 
+class GaussianLineBeam(object):
+    """Represents a Gaussian beam with specified standard deviation and energy.
+
+    The beam as Gaussian intensity cross section profile in z-lab.
+    The beam has uniform profile along y-lab.
+    The beam propagates along x-lab.
+
+    Args:
+        z_std (:obj:`float`): Standard deviation of the beam in z-lab.
+        energy (:obj:`float`): Energy of the beam.
+    """
+
+    def __init__(self, z_std, energy):
+        """Initialize the Gaussian beam.
+
+        Args:
+            z_std (:obj:`float`): Standard deviation of the beam in z-lab.
+            energy (:obj:`float`): Energy of the beam.
+        """
+        self.z_std = z_std
+        self._intensity_z = Normal(0, z_std)
+        self.energy = energy
+
+    def __call__(self, x):
+        """Calculate beam intensity weights based on the input positions.
+
+        Args:
+            x (:obj:`numpy.ndarray`): Lab coordinates, shape=(3,N).
+
+        Returns:
+            :obj:`numpy.ndarray`: Intensity weight for the given positions.
+        """
+        return self._intensity_z(x[2])
+
+
 if __name__ == "__main__":
     pass

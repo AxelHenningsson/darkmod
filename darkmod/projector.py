@@ -135,6 +135,7 @@ class GpuProjector(object):
         # vector from pixel (0,0) to (1,0) i.e detector rows
         v = -dz / (voxel_size * self.super_sampling)
 
+
         return np.concatenate((ray_direction, detector_center, u, v)).reshape(1, 12)
 
 
@@ -169,64 +170,83 @@ if __name__ == "__main__":
             data.shape[2] // 2 - pn + i : data.shape[2] // 2 + pn - i,
         ] = 7  # y
 
+
+    data *= 1
+
     # Detector size
     det_row_count = 256
     det_col_count = 256
-    voxel_size = 1
-    pixel_size = 2.0
+    voxel_size = 0.165
+    pixel_size = 1.2543
 
     # we have the optical axis to project along in lab cooridnates
-    theta = np.radians(30)
-    s, c = np.sin(2 * theta), np.cos(2 * theta)
-    Ry = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
-    optical_axis = Ry.T @ np.array([1, 0, 0])
-    ray_direction = optical_axis
-    detector_distance = 256
 
-    y = np.array([0, 1, 0])
-    z = np.array([0, 0, 1])
+    ss = []
+    for theta in np.linspace(-np.radians(45), np.radians(45), 48):
+        #theta = np.radians(45)
+        s, c = np.sin(2 * theta), np.cos(2 * theta)
+        Ry = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
+        optical_axis = Ry.T @ np.array([1, 0, 0])
+        ray_direction = optical_axis
+        detector_distance = 3.8734514406173886
 
-    zim = z
-    # theta = np.arccos(optical_axis[0]) / 2.
-    # s, c = np.sin(2*theta), np.cos(2*theta)
-    # Ry = np.array([[c,0,s],[0,1,0],[-s,0,c]])
-    # zim = Ry.T @ z
+        y, z = np.array([0, 1, 0]), np.array([0, 0, 1])
+        zim = Ry.T @ z
+        dr = pixel_size * det_row_count / 2.0
+        dc = pixel_size * det_col_count / 2.0
+        d0 = optical_axis - y * dc - zim * dr
+        d1 = d0 + y * det_col_count * pixel_size
+        d2 = d0 + zim * det_row_count * pixel_size
 
-    dr = pixel_size * det_row_count / 2.0
-    dc = pixel_size * det_col_count / 2.0
-    d0 = optical_axis * detector_distance - y * dc - zim * dr
-    d1 = d0 + y * det_col_count * pixel_size
-    d2 = d0 + zim * det_row_count * pixel_size
+        detector_corners = np.array([d0, d1, d2]).T
+        # print('optical_axis',optical_axis)
 
-    detector_corners = np.array([d0, d1, d2]).T
+        # print('d0',d0)
 
-    a = d1 - d0
-    b = d2 - d0
-    c = np.cross(a, b)
-    c /= np.linalg.norm(c)
-    print(c, optical_axis)
-    print(d0 - optical_axis * det_col_count)
+        # a = d1 - d0
+        # b = d2 - d0
+        # c = np.cross(a, b)
+        # c /= np.linalg.norm(c)
+        # print(c, optical_axis)
+        # print(d0 - optical_axis * det_col_count)
 
-    projector = GpuProjector(
-        detector_corners, pixel_size, det_row_count, det_col_count, super_sampling=2
-    )
+        projector = GpuProjector(
+            detector_corners, pixel_size, det_row_count, det_col_count, super_sampling=2
+        )
 
-    import cProfile
-    import pstats
-    import time
+        # import cProfile
+        # import pstats
+        # import time
 
-    pr = cProfile.Profile()
-    pr.enable()
-    t1 = time.perf_counter()
+        # pr = cProfile.Profile()
+        # pr.enable()
+        # t1 = time.perf_counter()
 
-    image = projector(data, voxel_size, ray_direction)
+        mag_vox_size=voxel_size*10
+        image = projector(data, mag_vox_size, ray_direction)
 
-    t2 = time.perf_counter()
-    pr.disable()
-    pr.dump_stats("tmp_profile_dump")
-    ps = pstats.Stats("tmp_profile_dump").strip_dirs().sort_stats("cumtime")
-    ps.print_stats(15)
-    print("\n\nCPU time is : ", t2 - t1, "s")
+        # print(image.sum())
+
+        # t2 = time.perf_counter()
+        # pr.disable()
+        # pr.dump_stats("tmp_profile_dump")
+        # ps = pstats.Stats("tmp_profile_dump").strip_dirs().sort_stats("cumtime")
+        # ps.print_stats(15)
+        # print("\n\nCPU time is : ", t2 - t1, "s")
+
+        print('image', image.sum())
+
+        ss.append(image.sum())
+
+
+    plt.figure(figsize=(8,6))
+    plt.plot(np.linspace(-np.radians(45), np.radians(45), 48), ss)
+    plt.grid(True)
+    plt.show()
+
+    plt.figure(figsize=(8,6))
+    plt.hist(np.array(ss)-np.mean(ss))
+    plt.show()
 
     plt.style.use("dark_background")
     fig, ax = plt.subplots(1, 1, figsize=(7, 7))

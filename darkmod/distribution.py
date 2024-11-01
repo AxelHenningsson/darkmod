@@ -376,7 +376,6 @@ class MultivariateNormal(object):
         Returns:
             :obj:`np.ndarray`: Sample from a multivariate Gaussian. shape=(n, number_of_samples).
         """
-        size = (len(self.mu), number_of_samples)
         return np.random.multivariate_normal(self.mu, cov=self.cov, size=(number_of_samples,)).T
 
     def _log_mult_gauss_pdf(self, x):

@@ -25,6 +25,7 @@ class Goniometer:
         self._yhat_lab = np.array([0., 1., 0.])
         self._zhat_lab = np.array([0., 0., 1.])
 
+
     def relative_move(self, dphi=None, dchi=None, domega=None, dmu=None):
         if dphi is not None:
             self.phi += dphi

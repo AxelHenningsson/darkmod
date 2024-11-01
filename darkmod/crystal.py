@@ -6,6 +6,9 @@ from scipy.spatial.transform import Rotation
 from darkmod.goniometer import Goniometer
 from darkmod import laue
 
+import meshio
+
+
 # TODO: implement non-zero eta diffraction alignments.
 
 
@@ -372,80 +375,78 @@ class Crystal(object):
 
         return df
 
-    def _get_angular_shifts(self, crl):
-        # TODO: this needs unit tets badly..
-        # TODO: should this be in the crl class and take an array
-        # of lab x coordinates.
-        x_lab_at_goni = self.goniometer.R @ self._x
-        x_imaging_at_goni = crl.imaging_system.T @ x_lab_at_goni
-        v = x_imaging_at_goni - crl.d1 * np.array([1, 0, 0]).reshape(3, 1)
-        v = v / np.linalg.norm(v, axis=0)
-        rotaxes = np.array(
-            [
-                v[1] * (-np.array([1, 0, 0])[2]) - v[2] * (-np.array([1, 0, 0])[1]),
-                v[2] * (-np.array([1, 0, 0])[0]) - v[0] * (-np.array([1, 0, 0])[2]),
-                v[0] * (-np.array([1, 0, 0])[1]) - v[1] * (-np.array([1, 0, 0])[0]),
-            ]
-        )
-        rotaxes = rotaxes / np.linalg.norm(rotaxes, axis=0)
-        angles = np.arccos(-np.array([1, 0, 0]) @ v)
-        rot = Rotation.from_rotvec((rotaxes * angles).T)
-        vertical, horizontal, _ = rot.as_davenport(
-            axes=np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]]), order="extrinsic"
-        ).T
-        return np.array( [horizontal, vertical] )
+    def _prune_volume(self, voxel_volume):
+        """Remove z-slices that have uniformly zero diffracted intensity
+
+        This is an optimisation that is relevant for line-beams.
+
+        Args:
+            voxel_volume (:obj:`numpy array`): The 3d array to be projected.
+
+        Returns:
+            :obj:`numpy array`: The reduced (along axis=2) 3d array to be projected.
+        """
+        slice_max = voxel_volume.max(axis=(0, 1))
+        non_zero_slice_mask = slice_max > np.max(slice_max) * 1e-8
+        start = np.argmax(non_zero_slice_mask)
+        end = len(non_zero_slice_mask) - np.argmax(non_zero_slice_mask[::-1]) - 1
+        return voxel_volume[:, :, start : end + 1]
 
     def diffract(self, hkl, resolution_function, crl, detector, beam):
-        Q_lab = self.get_Q_lab(hkl)
-        Q_lab_flat = Q_lab.reshape(self._flat_vector_shape).T
-        angular_crl_shifts = self._get_angular_shifts(crl)
+        Q_lab_flat = self.goniometer.R @ self._get_Q_sample_flat(hkl).T
+        x_lab = self.goniometer.R @ self._x
+        angular_crl_shifts = crl.get_angular_shifts(x_lab)
         p_Q = resolution_function(Q_lab_flat, angular_crl_shifts=angular_crl_shifts)
+        #p_Q = resolution_function(Q_lab_flat)
 
-        #p_Q_1 = resolution_function(Q_lab_flat, angular_crl_shifts=None)
-        #dd = (p_Q / p_Q_1).reshape(self._grid_scalar_shape)
-        # plt.style.use('dark_background')
-        # fig, ax = plt.subplots(1, 1, figsize=(7,7))
-        # dd = angular_crl_shifts[1].reshape(self._grid_scalar_shape)
-        # im = ax.imshow(np.abs(dd[dd.shape[0]//2,:,:]-1))
-        # #im = ax.imshow(dd[:, dd.shape[1]//2,:])
-        # #im = ax.imshow(np.abs(dd[:,:,dd.shape[2]//2]-1))
-        # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        # plt.tight_layout()
-        # plt.show()
-    
-        w = beam(self.goniometer.R @ self._x)
+        w = beam(x_lab)
         voxel_volume = (p_Q * w).reshape(self._grid_scalar_shape)
-        return detector.render(voxel_volume, self.voxel_size, crl, self.goniometer.R)
+
+        #print('voxel_volume', self._prune_volume(voxel_volume).sum(), 'voxel_size', self.voxel_size,)
+        #print('self.goniometer.R', self.goniometer.R, crl.theta)
+        image = detector.render(
+            self._prune_volume(voxel_volume),
+            self.voxel_size,
+            crl,
+            self.goniometer.R,
+        )
+
+        return image
+
+    def write(self, file):
+        """write the crystal spatial voxel field to a paraview readable file.
+
+        Args:
+            file (:obj:`string`): Absolute path ending with desired filename.
+
+        """
+        cells = [("vertex", np.array([[i] for i in range(self._x.shape[1])]))]
+        if len(file.split(".")) == 1:
+            filename = file + ".xdmf"
+        else:
+            filename = file
+
+        shape = (self._x.shape[1], 9)
+        meshio.Mesh(
+            self._x.T,
+            cells,
+            point_data={
+                "F": self.defgrad.reshape(shape),
+                "Voxel Size": np.ones((self._x.shape[1],)) * self.voxel_size,
+            },
+        ).write(filename)
 
 
 if __name__ == "__main__":
 
-    from darkmod.beam import GaussianBeam
+    from darkmod.beam import GaussianLineBeam
     from darkmod.detector import Detector
     from darkmod.resolution import DualKentGauss, PentaGauss
     from darkmod.crystal import Crystal
     from darkmod.crl import CompundRefractiveLens
     from darkmod.laue import keV_to_angstrom
     from darkmod import laue
-
-    def linear_y_gradient_field(shape):
-        # Linear strain gradient in zz-component moving across y.
-        F = unity_field(shape)
-        deformation_range = np.linspace(-0.003, 0.003, shape[1])
-        for i in range(len(deformation_range)):
-            F[:, i, :, 2, 2] += deformation_range[i]
-        return F
-
-    def unity_field(shape):
-        field = np.zeros((*shape, 3, 3))
-        for i in range(3):
-            field[:, :, :, i, i] = 1
-        return field
-
-    def simple_shear(shape, magnitude=0.02):
-        F = unity_field(shape)
-        F[:, :, :, 0, 1] = magnitude
-        return F
+    from darkmod.deformation import linear_gradient
 
     number_of_lenses = 50
     lens_space = 2000  # microns
@@ -480,41 +481,15 @@ if __name__ == "__main__":
     zg = np.linspace(-3, 3, 64)  # microns
     dx = xg[1] - xg[0]
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
-    defgrad = unity_field(X.shape)#linear_y_gradient_field(X.shape)
+    defgrad = linear_gradient(
+        X.shape,
+        component=(2, 2),
+        axis=1,
+        magnitude=0.003,
+    )
     crystal.discretize(X, Y, Z, defgrad)
+    crystal.write("test")
 
-    # import vtk
-    # import meshio
-
-    # def save_as_vtk_particles(file, coordinates, vector):
-    #     """Save numpy arrays with particle information to paraview readable format.
-
-    #     Args:
-    #         file (:obj:`string`): Absolute path ending with desired filename.
-    #         coordinates (:obj:`numpy array`): Coordinates of particle ensemble, shape=(N,3).
-    #         vector (:obj:`numpy array`): Velocities of particle ensemble, shape=(N,m).
-
-    #     """
-    #     cells = [("vertex", np.array([[i] for i in range(coordinates.shape[0])]) )]
-    #     if len(file.split("."))==1:
-    #         filename = file + ".vtk"
-    #     else:
-    #         filename = file
-    #     meshio.Mesh(
-    #         coordinates,
-    #         cells,
-    #         point_data={"vector": vector},
-    #         ).write(filename)
-    # m,n,o = Z.shape
-    # vecs = defgrad.reshape(m*n*o,9)
-    # save_as_vtk_particles('field', np.array([X.flatten(),Y.flatten(),Z.flatten()]).T, vecs)
-
-    # Q_lab and gamma_C corresponds to:
-    # hkl = 002 and cubic AL, a = 4.0493 with U=I
-    # After bringing these to Bragg conditions..
-
-    # -5.44137060e-01 -1.90025011e-16  3.05526733e+00]
-    # Q_lab = np.array([-5.44137060e-01 ,-1.90025011e-16 , 3.05526733e+00])
     Q_lab = crystal.goniometer.R @ crystal.UB_0 @ hkl
 
     # Beam divergence params
@@ -570,14 +545,14 @@ if __name__ == "__main__":
     # Detector size
     det_row_count = 512
     det_col_count = 512
-    pixel_size = 2*dx
+    pixel_size = 2 * dx
     print("pixel_size", pixel_size)
 
     detector = Detector.wall_mount(
         crl, pixel_size, det_row_count, det_col_count, super_sampling=2
     )
 
-    beam = GaussianBeam(y_std=1e8, z_std=0.125, energy=energy)
+    beam = GaussianLineBeam(z_std=0.125, energy=energy)
 
     import cProfile
     import pstats
@@ -588,12 +563,12 @@ if __name__ == "__main__":
     t1 = time.perf_counter()
 
     # crystal.goniometer.relative_move(dchi = np.radians(0.815))
-    crystal.goniometer.relative_move(dphi = -10*np.radians(0.005))
+    # crystal.goniometer.relative_move(dphi=-10 * np.radians(0.005))
     image = crystal.diffract(hkl, resolution_function, crl, detector, beam)
     if 0:
         rc = []
         for i in range(30):
-            crystal.goniometer.relative_move(dphi = np.radians(0.0025))
+            crystal.goniometer.relative_move(dphi=np.radians(0.0025))
             image = crystal.diffract(hkl, resolution_function, crl, detector, beam)
             rc.append(image.sum())
             print(i)
@@ -612,8 +587,8 @@ if __name__ == "__main__":
 
     plt.style.use("dark_background")
     fig, ax = plt.subplots(1, 1, figsize=(7, 7))
-    #if np.max(image) != 0:
-    #    image = image / np.max(image)
+    if np.max(image) != 0:
+        image = image / np.max(image)
     im = ax.imshow(image, cmap="gray", vmin=0, vmax=1)
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     plt.tight_layout()

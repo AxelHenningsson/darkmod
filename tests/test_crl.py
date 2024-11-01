@@ -9,9 +9,10 @@ from darkmod.crl import CompundRefractiveLens
 class TestCompundRefractiveLens(unittest.TestCase):
 
     def setUp(self):
+        self.DEBUG = True
         self.number_of_lenses = 50 # N
-        self.lens_space = 2 * 1e-3 # T
-        self.lens_radius = 50 * 1e-6 # R
+        self.lens_space = 2000 # T
+        self.lens_radius = 50 # R
         self.refractive_decrement = 1.65 * 1e-6  # delta
         self.magnification = 10
         self.crl = CompundRefractiveLens(self.number_of_lenses,
@@ -66,6 +67,48 @@ class TestCompundRefractiveLens(unittest.TestCase):
 
         return Mnumerical
 
+    def test_get_angular_shifts(self):
+
+        theta=np.radians(10)
+        self.crl.goto(theta, eta=0)
+
+        xi, yi, zi = self.crl.imaging_system.T
+
+        expected_angle = np.radians(30) 
+        L = self.crl.d1 * np.tan( expected_angle )
+
+        horizontal, vertical = self.crl.get_angular_shifts( L*yi.reshape(3,1) )
+        print('yi', horizontal, vertical, -expected_angle)
+        self.assertAlmostEqual(horizontal[0], -expected_angle)
+        self.assertAlmostEqual(vertical[0], 0)
+
+        horizontal, vertical = self.crl.get_angular_shifts( L*xi.reshape(3,1) )
+        print('xi', horizontal, vertical, expected_angle)
+        self.assertAlmostEqual(horizontal[0], 0)
+        self.assertAlmostEqual(vertical[0], 0)
+
+        horizontal, vertical = self.crl.get_angular_shifts( L*zi.reshape(3,1) )
+        print('zi', horizontal, vertical, expected_angle)
+        self.assertAlmostEqual(horizontal[0], 0)
+        self.assertAlmostEqual(vertical[0], expected_angle)
+
+        if self.DEBUG:
+            self.crl.goto(theta=np.radians(20), eta=0)
+            x_lab = np.random.rand(3, 5000)-0.5
+            shifts = self.crl.get_angular_shifts(x_lab)
+            x_im = self.crl.imaging_system.T @ x_lab
+            fig, ax = plt.subplots(1,2,figsize=(12,6))
+            ax[0].scatter(x_im[1], x_im[2], c=shifts[0])
+            ax[0].set_title('Horizontal shifts')
+            ax[1].scatter(x_im[1], x_im[2], c=shifts[1])
+            ax[1].set_title('Vertical shifts')
+            ax[0].grid(True)
+            ax[1].grid(True)
+            for a in ax.flatten():
+                a.set_xlabel('y')
+                a.set_ylabel('z')
+
+            plt.show()
 
 if __name__ == '__main__':
     unittest.main()

@@ -407,9 +407,12 @@ class PentaGauss(object):
         self._cov_x[2, 2] = std_beam_vertical**2
         self._cov_x[3, 3] = std_CRL_horizontal**2
         self._cov_x[4, 4] = std_CRL_vertical**2
-        self._x = MultivariateNormal(np.zeros((5,)), self._cov_x)
+
+        self._mean_x = np.zeros((5,))
+        self._mean_x[0] = 1 # thi corresponds to cenetring around the nominal Q.
+        self._x = MultivariateNormal(self._mean_x, self._cov_x)
         self._mean_wavelength = mean_wavelength
-        self.Q = None
+        self._p_Q = None
 
 
     def sample(self, number_of_samples):
@@ -424,36 +427,16 @@ class PentaGauss(object):
         Returns:
             :obj:`np.ndarray`: A sample of Q vectors of shape (3, number_of_samples).
         """
+        M = self._get_M()
+        return M @ self._x.sample(number_of_samples)
 
-        R = self._get_R()
-        k = 2*np.pi / self._mean_wavelength
-
-        epsilon, sigma_h, sigma_v, xi_h, xi_v = self._x.sample(number_of_samples)
-
-        k_in_0 = k * np.array([1, 0, 0])
-        k_out_0 = R @ k_in_0
-
-        dk_in = k * np.array([epsilon, sigma_h, sigma_v])
-        dk_out = k * R @ np.array([epsilon, xi_h, xi_v])
-
-        k_in = k_in_0[:,np.newaxis] + dk_in
-        k_out = k_out_0[:,np.newaxis] + dk_out
-
-        Qsample = k_out - k_in
-
-        return Qsample
-
-    def compile(self, Q):
+    def compile(self):
         """Compile the analytical expression of the reciprocal resolution function (p_Q) in lab frame.
-
-        Args:
-            Q (:obj:`np.ndarray`): Nominal Q-vector. shape=(3,)
-
         """
-        self.Q = Q
         M = self._get_M()
         self.cov_Q_lab = M @ self._cov_x @ M.T
-        self._p_Q = MultivariateNormal(self.Q, self.cov_Q_lab)
+        self.mean_Q_lab = M @ self._mean_x
+        self._p_Q = MultivariateNormal(self.mean_Q_lab, self.cov_Q_lab)
 
     def __call__(self, Q_vectors, angular_crl_shifts=None):
         """
@@ -466,15 +449,37 @@ class PentaGauss(object):
             :obj:`np.ndarray`: Likelihood of the given Q vectors. shape (N, )
         """
         assert len(Q_vectors.shape)==2 and Q_vectors.shape[0]==3
-        if self.Q is None:
+        if self._p_Q is None:
             raise ValueError('The resolution function requires compiling before any calls can be made to the PDF.')
         else:
             if angular_crl_shifts is not None:
                 dQ = self._get_Q_shifts(angular_crl_shifts)
-                return self._p_Q(Q_vectors + dQ)
+                return self._p_Q(Q_vectors + dQ, normalise=False)
             else:
-                return self._p_Q(Q_vectors)
-    
+                return self._p_Q(Q_vectors, normalise=False)
+
+    def theta_shift(self, theta):
+        """Shift the mean of the resolution in theta, corresponds to moving the CRL.
+
+        This moves the mean of the vertical dsitirbution of the CRL.
+
+        NOTE: this will not recompile the resolution fuction. I.e the covariance
+        will not change, only the mean.
+
+        Args:
+            theta (:obj:`float`): The new theta position in radians.
+            
+        """
+        if self._p_Q is not None:
+            M = self._get_M()
+            theta0 = np.arccos(self.optical_axis[0]) / 2.
+            delta_two_theta = 2*theta - 2*theta0
+            self._mean_x[4] =  delta_two_theta
+            self.mean_Q_lab = M @ self._mean_x
+            self._p_Q.mu = self.mean_Q_lab
+        else:
+            raise ValueError('The resolution function requires compiling before any theta shifts can be introduced.')
+
     def _get_Q_shifts(self, angular_crl_shifts):
         M = self._get_M()
         dQ = M[:,-2:] @ angular_crl_shifts
@@ -785,7 +790,7 @@ class DualKentGauss(object):
         """
         return np.exp(a)
 
-    def __call__(self, Q_vectors):
+    def __call__(self, Q_vectors, angular_crl_shifts=None):
         """
         Calculate the likelihood of a set of Q vectors.
 
@@ -801,7 +806,7 @@ class DualKentGauss(object):
         else:
             Q_vectors_q_system = lab_to_Q(Q_vectors, self.Q)
             return self._p_Q_interp(Q_vectors_q_system.T)
-
+    
     def sample(self, number_of_samples):
         """
         Generate samples of Q vectors using the Henningsson method.
@@ -970,7 +975,7 @@ if __name__ == "__main__":
         Qs[1,:] = Q[1]
         Qs[2,:] = Q[2]
 
-        res1.compile(Q)
+        res1.compile()
         p_Q = res1( Qs )
         plt.figure()
         plt.plot(Qs[0,:] - Q[0], p_Q, 'ro--')

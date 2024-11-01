@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def edge_dislocation(X, Y, x0=[ [0, 0] ], v=0.3, b=2.86*1e-4):
+def edge_dislocation(X, Y, x0=[[0, 0]], v=0.3, b=2.86 * 1e-4):
     """Calculate the deformation gradient for an edge dislocation.
 
     Computes the deformation field caused by edge dislocations
@@ -17,23 +17,84 @@ def edge_dislocation(X, Y, x0=[ [0, 0] ], v=0.3, b=2.86*1e-4):
         :obj:`np.ndarray`: Deformation gradient tensor F, shape=(m, n, 3, 3).
     """
     F = np.zeros((*X.shape, 3, 3))
-    a_1 = b / ( 4 * np.pi* ( 1 - v ) )
+    a_1 = b / (4 * np.pi * (1 - v))
 
     for x, y in x0:
 
-        Ys, Xs = (X-x), (Y-y)
-        x2, y2 = Ys*Ys, Xs*Xs
-        a_2 = (x2+y2)
-        a_3 = 1 / ( (a_2*a_2) )
-        a_4 = -2*v*a_2
+        Ys, Xs = (X - x), (Y - y)
+        x2, y2 = Ys * Ys, Xs * Xs
+        a_2 = x2 + y2
+        a_3 = 1 / ((a_2 * a_2))
+        a_4 = -2 * v * a_2
 
-        F[:, :, 0, 0] += ( -Ys * (3*x2 +   y2 + a_4))*a_3
-        F[:, :, 0, 1] += (  Xs * (3*x2 +   y2 + a_4))*a_3
-        F[:, :, 1, 0] += ( -Xs * (  x2 + 3*y2 + a_4))*a_3
-        F[:, :, 1, 1] += (  Ys * (  x2 -   y2 + a_4))*a_3
+        F[:, :, 0, 0] += (-Ys * (3 * x2 + y2 + a_4)) * a_3
+        F[:, :, 0, 1] += (Xs * (3 * x2 + y2 + a_4)) * a_3
+        F[:, :, 1, 0] += (-Xs * (x2 + 3 * y2 + a_4)) * a_3
+        F[:, :, 1, 1] += (Ys * (x2 - y2 + a_4)) * a_3
 
     F *= a_1
 
-    for i in range(3): F[:, :, i, i] += 1
+    for i in range(3):
+        F[:, :, i, i] += 1
 
+    return F
+
+
+def linear_gradient(shape, component=(2, 2), axis=1, magnitude=0.003):
+    """Linear gradient in x,y or z-component moving across x,y or z.
+
+    Args:
+        shape (:obj:`tuple` of int): The 3D spatial array shape (m,n,o) of the field.
+        component (:obj:`tuple` of int, optional): The component of the  deformation
+            will vary across the field. Defaults to (2,2), i.e the zz-component.
+        axis (:obj:`int`, optional): The axis (x,y,z) that the linear gradient varies across.
+            Defaults to 2, i.e the y direction.
+        magnitude (:obj:`float`, optional): Value of the graident, the gradient will range
+             from -magnitude to +magnitude. Defaults to 0.003.
+
+    Returns:
+        :obj:`np.ndarray: Deformation graident tensor field of shape=(m,n,o,3,3).
+    """
+    F = unity_field(shape)
+    k, l = component
+    deformation_range = np.linspace(-magnitude, magnitude, shape[1])
+    for i in range(len(deformation_range)):
+        if axis == 0:
+            F[i, :, :, k, l] += deformation_range[i]
+        elif axis == 1:
+            F[:, i, :, k, l] += deformation_range[i]
+        elif axis == 2:
+            F[:, :, i, k, l] += deformation_range[i]
+    return F
+
+
+def unity_field(shape):
+    """A field of unity deformation (i.e no deformation)
+
+    Args:
+        shape (:obj:`tuple` of int): The 3D spatial array shape (m,n,o) of the field.
+
+    Returns:
+        :obj:`np.ndarray: Deformation graident tensor field of shape=(m,n,o,3,3).
+    """
+    F = np.zeros((*shape, 3, 3))
+    for i in range(3):
+        F[:, :, :, i, i] = 1
+    return F
+
+
+def simple_shear(shape, shear_magnitude=0.003):
+    """A field of uniform simple shear deformation.
+
+    The F[0, 1] component is set to the fixed value of shear_magnitude.
+
+    Args:
+        shape (:obj:`tuple` of int): The 3D spatial array shape (m,n,o) of the field.
+        shear_magnitude (:obj:`float`, optional): Value of the shear. Defaults to 0.003.
+
+    Returns:
+        :obj:`np.ndarray: Deformation graident tensor field of shape=(m,n,o,3,3).
+    """
+    F = unity_field(shape)
+    F[:, :, :, 0, 1] = shear_magnitude
     return F
