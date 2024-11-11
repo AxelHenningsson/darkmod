@@ -1,6 +1,6 @@
 from darkmod.beam import GaussianLineBeam
 from darkmod.detector import Detector
-from darkmod.resolution import DualKentGauss, PentaGauss
+from darkmod.resolution import DualKentGauss, PentaGauss, TruncatedPentaGauss
 from darkmod.crystal import Crystal
 from darkmod.crl import CompundRefractiveLens
 from darkmod.laue import keV_to_angstrom
@@ -73,14 +73,14 @@ if __name__ == "__main__":
     mu_lambda = lambda_0
 
     FWHM_CRL_vertical = 0.556 * 1e-3
-    angular_tilt = 0.83 * 1e-3 # perhaps this is what happened in Poulsen 2017?
+    angular_tilt = 0.73 * 1e-3 # perhaps this is what happened in Poulsen 2017?
     # the idea is that a slight horizontal titlt of the CRL will cause the
     # NA in the horixontal plane to decrease which would explain the rolling curve
     # discrepancies.
     dh = (crl.length * np.sin( angular_tilt ))*1e-6
-    FWHM_CRL_horizontal = ( FWHM_CRL_vertical - 2 * dh ) 
+    FWHM_CRL_horizontal = FWHM_CRL_vertical- 2 * dh
 
-    # TODO: test with the truncated version.
+    # # TODO: truncation wont help
     resolution_function = PentaGauss(
         crl.optical_axis,
         1e-9 / (2 * np.sqrt(2 * np.log(2))),
@@ -92,6 +92,7 @@ if __name__ == "__main__":
         sigma_lambda,
     )
     resolution_function.compile()
+
 
     print('')
     print('-------------------------------------------------')
@@ -128,11 +129,14 @@ if __name__ == "__main__":
     # ROLLING CURVE
     dphis = []
     dths = []
-    npoints = 30
+    npoints = 61
     chi_values = np.linspace(-2, 2, npoints)*1e-3 
     rc = np.zeros((npoints,))
     for i in range(npoints):
+
         crystal.goniometer.chi = chi_values[i]
+
+
         image = crystal.diffract(
             hkl,
             resolution_function,
@@ -140,20 +144,43 @@ if __name__ == "__main__":
             detector,
             beam,
         )
+
         Q = crystal.get_Q_lab(hkl)[0,0,0]
         q = Q / np.linalg.norm(Q)
         th = -(np.arccos( -q[0] )-np.pi/2.)
-        dth = theta - th
-        dphi = (1-np.cos(theta))*crystal.goniometer.chi
+        dth = theta - th # distance to perfect bragg condition
+
+        dphi = (1-np.cos(theta))*np.abs(crystal.goniometer.chi)
         rc[i] = image.sum()
         print(i, rc[i], dth, dphi, crystal.goniometer.chi)
 
         dphis.append(dphi)
         dths.append(dth)
 
+    #f = lambda _chi: theta - (np.arccos( np.cos(theta)**2 - np.cos(_chi)*np.sin(theta)**2)/2.)
+    # f = lambda _chi: np.arccos( (np.cos(theta)**2 - np.cos( 2*theta )) / (np.sin(theta)**2) ) - _chi
+    
+    # f1 = lambda _chi: (2*np.sqrt(-np.sin(theta)**4 + np.sin(theta)**2)) / (np.sin(theta)*np.sin(theta))
+
+    plt.figure(figsize=(8,6))
+    plt.plot(chi_values*1e3, np.array(dphis)*1e3,'yo--')
+    plt.plot(chi_values*1e3, np.array(dths)*1e3,'ko--')
+    # plt.plot(chi_values*1e3, f(chi_values),'ro--')
+    # plt.plot(chi_values*1e3, f1(chi_values),'bo--')
+
+    # plt.grid(True)
+    # plt.show()
+
+    def find_fwhm(x, y):
+        half_max = np.max(y) / 2
+        indices = np.where(y >= half_max)[0]
+        fwhm = x[indices[-1]] - x[indices[0]]
+        return fwhm
+
+
     w = rc/np.sum(rc)
     sigma_roll = np.sqrt(np.sum(w*(chi_values**2)))
-    FWHM_roll = sigma_roll * (2 * np.sqrt(2 * np.log(2)))
+    FWHM_roll = find_fwhm(chi_values, w)
     
     plt.style.use('dark_background')# place a text box in upper left in axes coords
     fig, ax = plt.subplots(1,1,figsize=(8,6))

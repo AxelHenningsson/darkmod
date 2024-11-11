@@ -1,6 +1,6 @@
 from darkmod.beam import GaussianLineBeam
 from darkmod.detector import Detector
-from darkmod.resolution import DualKentGauss, PentaGauss
+from darkmod.resolution import DualKentGauss, TruncatedPentaGauss
 from darkmod.crystal import Crystal
 from darkmod.crl import CompundRefractiveLens
 from darkmod.laue import keV_to_angstrom
@@ -86,19 +86,43 @@ if __name__ == "__main__":
     print("pixel_size", pixel_size)
 
 
-    resolution_function = PentaGauss(
-        crl.optical_axis,
-        1e-9 / (2 * np.sqrt(2 * np.log(2))),
-        #desired_FWHM_N / (2 * np.sqrt(2 * np.log(2))),
-        desired_FWHM_N / (2 * np.sqrt(2 * np.log(2))),
-        FWHM_CRL_horizontal / (2 * np.sqrt(2 * np.log(2))),
-        FWHM_CRL_vertical / (2 * np.sqrt(2 * np.log(2))),
-        mu_lambda,
-        sigma_lambda,
-    )
-    resolution_function.compile()
 
-    M = resolution_function._get_M()
+    physical_aperture = 2 * FWHM_CRL_vertical / (2 * np.sqrt(2 * np.log(2)))
+    #D = 0.477 * 1e-3
+    #physical_aperture = np.arctan( D / (2*crl.d1) )
+    #physical_aperture = 10000000000000
+
+
+    xray_params = {
+        "std_beam_horizontal": 1e-9 / (2 * np.sqrt(2 * np.log(2))),
+        "lower_bound_beam_horizontal": None,
+        "upper_bound_beam_horizontal": None,
+        
+        "std_beam_vertical": desired_FWHM_N / (2 * np.sqrt(2 * np.log(2))),
+        "lower_bound_beam_vertical": -desired_FWHM_N/2.,
+        "upper_bound_beam_vertical":  desired_FWHM_N/2.,
+        
+        "std_CRL_horizontal": FWHM_CRL_horizontal / (2 * np.sqrt(2 * np.log(2))),
+        "lower_bound_CRL_horizontal": -physical_aperture,
+        "upper_bound_CRL_horizontal": physical_aperture,
+        
+        "std_CRL_vertical": FWHM_CRL_vertical / (2 * np.sqrt(2 * np.log(2))),
+        "lower_bound_CRL_vertical": -physical_aperture,
+        "upper_bound_CRL_vertical": physical_aperture,
+        
+        "std_energy_shift": sigma_e,
+        "lower_bound_energy_shift": None,
+        "upper_bound_energy_shift": None,
+    }
+
+    resolution_function = TruncatedPentaGauss(
+                crl.optical_axis,
+                mu_lambda,
+                xray_params,
+                    )
+
+    resolution_function.compile(resolution=(1*1e-4, 1*1e-4, 1*1e-4))
+
 
     beam = GaussianLineBeam(z_std=0.2, energy=energy)
 
@@ -107,28 +131,8 @@ if __name__ == "__main__":
     )
     
     # 2 THETA CURVE
-    npoints = 60
+    npoints = 120
     th_values = crl.theta + np.linspace(-1, 1, npoints)*1e-3
-
-
-    Q0 = resolution_function._p_Q.mu
-
-    #th_values = np.linspace(0, np.radians(90), npoints)
-    #th_values = crl.theta + np.linspace(-1, 1, npoints)*1e-3
-
-    resolution_function = PentaGauss(
-        crl.optical_axis,
-        1e-9 / (2 * np.sqrt(2 * np.log(2))),
-        #desired_FWHM_N / (2 * np.sqrt(2 * np.log(2))),
-        desired_FWHM_N / (2 * np.sqrt(2 * np.log(2))),
-        FWHM_CRL_horizontal / (2 * np.sqrt(2 * np.log(2))),
-        FWHM_CRL_vertical / (2 * np.sqrt(2 * np.log(2))),
-        mu_lambda,
-        sigma_lambda,
-    )
-    resolution_function.compile()
-    cov0 = resolution_function._p_Q.cov
-    mu0 = resolution_function._p_Q.mu
 
     rc = np.zeros((npoints,))
 

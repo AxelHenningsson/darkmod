@@ -394,6 +394,7 @@ class Crystal(object):
 
     def diffract(self, hkl, resolution_function, crl, detector, beam):
         Q_lab_flat = self.goniometer.R @ self._get_Q_sample_flat(hkl).T
+
         x_lab = self.goniometer.R @ self._x
         angular_crl_shifts = crl.get_angular_shifts(x_lab)
         p_Q = resolution_function(Q_lab_flat, angular_crl_shifts=angular_crl_shifts)
