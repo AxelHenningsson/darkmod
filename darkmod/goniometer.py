@@ -6,6 +6,22 @@ from darkmod import laue
 
 # TODO: implement non-zero etas
 
+class HighPrecisionRotation(object):
+
+    def __init__(self, scipy_rotation):
+        self.scipy_rotation = scipy_rotation
+
+    def __matmul__(self, vectors):
+        return self.scipy_rotation.apply( vectors.T ).T
+    
+    def as_matrix(self):
+        return self.scipy_rotation.as_matrix()
+
+    @property
+    def T(self):
+        return type(self)( self.scipy_rotation.inv() )
+
+
 class Goniometer:
     """
     A class to represent a Dark-Field X-ray Microscopy (DFXM) goniometer setup.
@@ -76,24 +92,27 @@ class Goniometer:
         axes = np.array([self._xhat_lab, self._zhat_lab, self._yhat_lab]) # Phi then Chi then Mu
         chi, omega, mu = Rotation.as_davenport(rotation, axes, order='extrinsic')
         return 0, chi, omega, mu
+    
+
 
     @property
     def R(self):
-        """Rotation matrix for the current goniometer angles.
+        """Rotation object for the current goniometer angles.
 
-        This matrix will take a vector in sample system and bring it
+        This rotation will take a vector in sample system and bring it
         to the lab frame, such that R @ sample = lab. I.e R is the
         Cartesian basis of the sample system as described in lab
         coordinates.
 
         Returns:
-            (:obj:`numpy array`): Rotation matrix. shape=(3,3).
+            (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer rotation.
         """
         Ry_phi = Rotation.from_rotvec(self._yhat_lab * self.phi)
         Rx_chi = Rotation.from_rotvec(self._xhat_lab * self.chi)
         Rz_omega = Rotation.from_rotvec(self._zhat_lab * self.omega)
         Ry_mu = Rotation.from_rotvec(self._yhat_lab * self.mu)
-        return (Ry_mu * Rz_omega * Rx_chi * Ry_phi).as_matrix()
+        R_goni = HighPrecisionRotation(Ry_mu * Rz_omega * Rx_chi * Ry_phi)
+        return R_goni
 
     @property
     def info(self):

@@ -145,16 +145,18 @@ if __name__ == "__main__":
     FWHM_rock = sigma_rock * (2 * np.sqrt(2 * np.log(2)))
     
     plt.style.use('dark_background')# place a text box in upper left in axes coords
-    fig, ax = plt.subplots(1,1,figsize=(8,6))
-    ax.set_title('Rocking curve for a Diamond 1$\\bar{1}$1 at 17keV')
+    fig, ax = plt.subplots(1,1,figsize=(16,12))
+    ax.set_title('Rocking curve for a Diamond 1-11 at 17keV', fontsize=32)
     props = dict(boxstyle='round', facecolor='gray', alpha=0.25)
     textstr = '\n'.join((
         r'$FWHM=%.3f$  mrad' % (FWHM_rock*1e3, ),
         r'$\sigma=%.3f$  mrad' % (sigma_rock*1e3, )
         ))
-    ax.text(0.65, 0.9, textstr, transform=ax.transAxes, fontsize=14,
-            verticalalignment='top', bbox=props)
-    ax.plot(phi_values*1e3, rc, 'ro--')
+    ax.text(0.60, 0.9, textstr, transform=ax.transAxes,
+            verticalalignment='top', bbox=props, fontsize=32)
+    ax.plot(phi_values*1e3, rc, 'ro--', markersize=16, linewidth=3)
     ax.grid(True, alpha=0.25)
-    ax.set_xlabel('$\phi$ - miliradians')
+    ax.set_xlabel('$\phi$ - miliradians', fontsize=32)
+    ax.set_ylabel('Integrated detector counts', fontsize=32)
+    ax.tick_params(axis="both", which="major", labelsize=26)
     plt.show()

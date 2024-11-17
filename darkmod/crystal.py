@@ -405,6 +405,7 @@ class Crystal(object):
 
         #print('voxel_volume', self._prune_volume(voxel_volume).sum(), 'voxel_size', self.voxel_size,)
         #print('self.goniometer.R', self.goniometer.R, crl.theta)
+
         image = detector.render(
             self._prune_volume(voxel_volume),
             self.voxel_size,

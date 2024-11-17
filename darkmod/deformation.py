@@ -1,5 +1,5 @@
 import numpy as np
-
+from scipy.spatial.transform import Rotation
 
 def edge_dislocation(X, Y, x0=[[0, 0]], v=0.3, b=2.86 * 1e-4):
     """Calculate the deformation gradient for an edge dislocation.
@@ -67,6 +67,31 @@ def linear_gradient(shape, component=(2, 2), axis=1, magnitude=0.003):
             F[:, :, i, k, l] += deformation_range[i]
     return F
 
+def rotation_gradient(shape, rotation_axis, axis=1, magnitude=0.003):
+    """Linear gradient in x,y or z-component moving across x,y or z.
+
+    Args:
+        shape (:obj:`tuple` of int): The 3D spatial array shape (m,n,o) of the field.
+        rot_ax (:obj:`numpy array`): The axis of rotation.
+        axis (:obj:`int`, optional): The axis (x,y,z) that the linear gradient varies across.
+            Defaults to 2, i.e the y direction.
+        magnitude (:obj:`float`, optional): Value of the graident in radians.
+
+    Returns:
+        :obj:`np.ndarray: Deformation graident tensor field of shape=(m,n,o,3,3).
+    """
+    r = rotation_axis / np.linalg.norm(rotation_axis)
+    F = unity_field(shape)
+    deformation_range = np.linspace(-magnitude, magnitude, shape[1])
+    for i in range(len(deformation_range)):
+        rotmat = Rotation.from_rotvec(r*deformation_range[i]).as_matrix()
+        if axis == 0:
+            F[i, :, :, :, :] = rotmat
+        elif axis == 1:
+            F[:, i, :, :, :] = rotmat
+        elif axis == 2:
+            F[:, :, i, :, :] = rotmat
+    return F
 
 def unity_field(shape):
     """A field of unity deformation (i.e no deformation)

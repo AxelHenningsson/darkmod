@@ -78,7 +78,7 @@ if __name__ == "__main__":
     # NA in the horixontal plane to decrease which would explain the rolling curve
     # discrepancies.
     dh = (crl.length * np.sin( angular_tilt ))*1e-6
-    FWHM_CRL_horizontal = FWHM_CRL_vertical- 2 * dh
+    FWHM_CRL_horizontal = FWHM_CRL_vertical#- 2 * dh
 
     # # TODO: truncation wont help
     resolution_function = PentaGauss(
@@ -183,16 +183,20 @@ if __name__ == "__main__":
     FWHM_roll = find_fwhm(chi_values, w)
     
     plt.style.use('dark_background')# place a text box in upper left in axes coords
-    fig, ax = plt.subplots(1,1,figsize=(8,6))
-    ax.set_title('Rolling curve for a Diamond 1$\\bar{1}$1 at 17keV')
+    fig, ax = plt.subplots(1,1,figsize=(16,12))
+    ax.set_title('Rolling curve for a Diamond 1-11 at 17keV', fontsize=32)
     props = dict(boxstyle='round', facecolor='gray', alpha=0.25)
     textstr = '\n'.join((
         r'$FWHM=%.2f$  mrad' % (FWHM_roll*1e3, ),
         r'$\sigma=%.2f$  mrad' % (sigma_roll*1e3, )
         ))
-    ax.text(0.65, 0.9, textstr, transform=ax.transAxes, fontsize=14,
-            verticalalignment='top', bbox=props)
-    ax.plot(chi_values*1e3, rc, 'ro--')
+    ax.text(0.60, 0.9, textstr, transform=ax.transAxes,
+            verticalalignment='top', bbox=props, fontsize=32)
+    ax.plot(chi_values*1e3, rc, 'bo--', markersize=16, linewidth=3)
     ax.grid(True, alpha=0.25)
-    ax.set_xlabel('$\chi$ - miliradians')
+    ax.set_xlabel('$\chi$ - miliradians', fontsize=32)
+    ax.tick_params(axis="both", which="major", labelsize=26)
+    ax.set_ylabel('Integrated detector counts', fontsize=32)
+
     plt.show()
+

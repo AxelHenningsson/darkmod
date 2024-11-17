@@ -160,6 +160,7 @@ _
         # support rotated volumes. Also, this is faster than rotating all the voxels
         # in the volume, here we require to only rotate the optical axis and the
         # detector corners.
+
         self._projector.detector_corners = sample_rotation.T @ self.detector_corners
         ray_direction = sample_rotation.T @ crl.optical_axis
 
