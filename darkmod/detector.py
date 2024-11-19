@@ -145,7 +145,7 @@ _
                 diffracted intensity in each voxel. shape=(m,n,o).
             voxel_size (_type_): voxel size in microns.
             crl (obj:`darkmod.crl.CompoundRefractiveLens`): The crl.
-            sample_rotation (:obj:`np.ndarray`): The rotaiton matrix that brings sample vectors
+            sample_rotation (:obj:`np.ndarray`): The rotation matrix that brings sample vectors
                 to lab frame. I.e the goniometer setting. Defaults to np.eye(3) in which case
                 sample and lab frames are considered to be aligned. shape=(3,3).
 

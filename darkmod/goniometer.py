@@ -6,20 +6,7 @@ from darkmod import laue
 
 # TODO: implement non-zero etas
 
-class HighPrecisionRotation(object):
-
-    def __init__(self, scipy_rotation):
-        self.scipy_rotation = scipy_rotation
-
-    def __matmul__(self, vectors):
-        return self.scipy_rotation.apply( vectors.T ).T
-    
-    def as_matrix(self):
-        return self.scipy_rotation.as_matrix()
-
-    @property
-    def T(self):
-        return type(self)( self.scipy_rotation.inv() )
+from darkmod.transforms import HighPrecisionRotation
 
 
 class Goniometer:
@@ -93,7 +80,68 @@ class Goniometer:
         chi, omega, mu = Rotation.as_davenport(rotation, axes, order='extrinsic')
         return 0, chi, omega, mu
     
+    def get_R_top(self, phi, chi):
+        """Construct a joint rotation object for the top level motors phi and chi.
 
+        Args:
+            phi (:obj:`float`): Phi angle in radians (top rock - y rotation).
+            chi (:obj:`float`): Chi angle in radians (top roll - x rotation).
+
+        Returns:
+            (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer phi rotation object.
+        """
+        Ry_phi = Rotation.from_rotvec(self._yhat_lab * phi)
+        Rx_chi = Rotation.from_rotvec(self._xhat_lab * chi)
+        return  HighPrecisionRotation(Rx_chi * Ry_phi)
+
+
+    def get_R_phi(self, phi):
+        """Construct a rotation object for an input phi.
+
+        Args:
+            phi (:obj:`float`): Phi angle in radians (top rock - y rotation).
+
+        Returns:
+            (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer phi rotation object.
+        """
+        Ry_phi = Rotation.from_rotvec(self._yhat_lab * phi)
+        return HighPrecisionRotation(Ry_phi)
+
+    def get_R_chi(self, chi):
+        """Construct a rotation object for an input chi.
+
+        Args:
+            chi (:obj:`float`): Chi angle in radians (top roll - x rotation).
+
+        Returns:
+            (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer chi rotation object.
+        """
+        Rx_chi = Rotation.from_rotvec(self._xhat_lab * chi)
+        return HighPrecisionRotation(Rx_chi)
+    
+    def get_R_omega(self, omega):
+        """Construct a rotation object for an input omega.
+
+        Args:
+            omega (:obj:`float`): Omega angle in radians (around Q-vector - z rotation).
+
+        Returns:
+            (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer omega rotation object.
+        """
+        Rz_omega = Rotation.from_rotvec(self._zhat_lab * omega)
+        return HighPrecisionRotation(Rz_omega)
+
+    def get_R_mu(self, mu):
+        """Construct a rotation object for an input mu.
+
+        Args:
+            mu (:obj:`float`): Mu angle in radians (bottom roll - x rotation).
+
+        Returns:
+            (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer mu rotation object.
+        """
+        Ry_mu = Rotation.from_rotvec(self._yhat_lab * mu)
+        return HighPrecisionRotation(Ry_mu)
 
     @property
     def R(self):

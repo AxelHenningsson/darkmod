@@ -1,6 +1,32 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+class HighPrecisionRotation(object):
+    """Scipy wrapper to have R @ vector work out of the box without having to call
+    the .apply() method, and to allow for the notation of R.T = R.inv()
+
+    Args:
+        object (scipy.spatial.transform.Rotation): scipy_rotation
+    """
+
+    def __init__(self, scipy_rotation):
+        self.scipy_rotation = scipy_rotation
+
+    def __matmul__(self, vectors):
+        return self.scipy_rotation.apply( vectors.T ).T
+
+    def __mul__(self, other):
+        return HighPrecisionRotation( self.scipy_rotation * other.scipy_rotation ) 
+
+    def __rmul__(self, other):
+        return HighPrecisionRotation( other.scipy_rotation * self.scipy_rotation ) 
+
+    def as_matrix(self):
+        return self.scipy_rotation.as_matrix()
+
+    @property
+    def T(self):
+        return HighPrecisionRotation( self.scipy_rotation.inv() )
 
 def _lab_to_Q_rot_mat(Q_lab):
     q_ll = Q_lab / np.linalg.norm(Q_lab)

@@ -60,7 +60,7 @@ if __name__ == "__main__":
     # )
     defgrad = rotation_gradient(
     X.shape,
-    rotation_axis=np.array([1, 1, 1]),
+    rotation_axis=np.array([0, 1, 0]),
     axis=1,
     magnitude=1e-4,
     )
@@ -196,12 +196,8 @@ if __name__ == "__main__":
     if 1:
 
         import darling
-        from scipy.ndimage import (
-            binary_dilation,
-            binary_fill_holes,
-            find_objects,
-            label,
-        )
+        from scipy.ndimage import (binary_dilation, binary_fill_holes,
+                                   find_objects, label)
 
         plt.style.use('dark_background')
         fig, ax = plt.subplots(1, 1, figsize=(16, 16))
@@ -261,12 +257,17 @@ if __name__ == "__main__":
             cbar.ax.tick_params(labelsize=32)
         plt.tight_layout()
 
-        # The central layer of the voxel volume flipped and normalised
-        # this represents what would be seen in terms of Q lab if one
-        # had the proper degrees of freedom.
-        Q_true = crystal.get_Q_lab(hkl)
-        Q_true = Q_true / np.linalg.norm(Q_true, axis=-1)[:, :, :, np.newaxis]
-        Q_true = np.flip( Q_true[:, :, len(zg) // 2, :], axis=1)
+        # We expect to be able to approximate the mean Q vector along the ray paths.
+        Q_lab_vol = crystal.get_Q_lab(hkl)
+
+        Qx = detector.render(Q_lab_vol[:,:,:,0], crystal.voxel_size, crl, crystal.goniometer.R)
+        Qy = detector.render(Q_lab_vol[:,:,:,1], crystal.voxel_size, crl, crystal.goniometer.R)
+        Qz = detector.render(Q_lab_vol[:,:,:,2], crystal.voxel_size, crl, crystal.goniometer.R)
+
+        sample_density = np.ones((Q_lab_vol.shape[0], Q_lab_vol.shape[1], Q_lab_vol.shape[2])) # TODO: should be beam density?
+        sample = detector.render(sample_density, crystal.voxel_size, crl, crystal.goniometer.R)
+        Q_true = np.stack((Qx, Qy, Qz), axis=-1) / sample[:, :, np.newaxis]
+        Q_true /= np.linalg.norm(Q_true, axis=-1)[:, :, np.newaxis]
 
         # The reconstructed Q directions are found as
         # Qrec_lab = R @ Q0_sample

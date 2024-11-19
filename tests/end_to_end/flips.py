@@ -55,18 +55,27 @@ if __name__ == "__main__":
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
 
     # defgrad = unity_field(X.shape)
+    # defgrad = linear_gradient(
+    #     X.shape,
+    #     component=(2, 2),
+    #     axis=1,
+    #     magnitude=0.0002,
+    # )
+
+    # defgrad = rotation_gradient(
+    #     X.shape,
+    #     rotation_axis=np.array([0, 1, 0]),
+    #     axis=0,
+    #     magnitude=0.01 * 1e-3,
+    # )
+
     defgrad = linear_gradient(
       X.shape,
        component=(2, 2),
-       axis=0,
+       axis=2,
        magnitude=0.001,
     )
-    # defgrad = rotation_gradient(
-    # X.shape,
-    # rotation_axis=np.array([0, 1, 0]),
-    # axis=1,
-    # magnitude=1e-4,
-    # )
+
     crystal.discretize(X, Y, Z, defgrad)
     crystal.write("strain_gradient")
 
@@ -91,7 +100,6 @@ if __name__ == "__main__":
     dh = (crl.length * np.sin(angular_tilt)) * 1e-6
     FWHM_CRL_horizontal = FWHM_CRL_vertical - 2 * dh
 
-    # # TODO: truncation wont help
     resolution_function = PentaGauss(
         crl.optical_axis,
         1e-9 / (2 * np.sqrt(2 * np.log(2))),
@@ -119,41 +127,33 @@ if __name__ == "__main__":
 
     beam = GaussianLineBeam(z_std=0.1, energy=energy)
 
+
     F = crystal.defgrad[0, 16, 16]
     eps = (F.T@F - np.eye(3))/2.
     eps_z = eps[2,2]
-
     theta_deformed = np.arcsin( lambda_0 / (2 * d_0*(1+eps_z)) )
     theta_range = 2*(crl.theta - theta_deformed)
     print('theta range: ', np.round(np.abs(theta_range*1e3),3), 'mrad')
 
     pad = np.abs(crl.theta - theta_deformed) * 1e3
-    ntheta = 11
-    nphi = 11
-    nchi = 5
-    theta_values = np.linspace(-1 - pad, 1 + pad, ntheta)*1e-3
-    phi_values = np.linspace(-0.05 - pad, 0.05 + pad, nphi)*1e-3
-    chi_values = np.linspace(-2, 2, nchi)*1e-3
 
-    for angarr in (theta_values, phi_values, chi_values):
+    print(pad)
+
+    nphi = 7
+    nchi = 5
+    phi_values = np.linspace(-0.13 - 2*pad , 0.13 + 2*pad, nphi)*1e-3
+    chi_values = np.linspace(-2.5, 2.5, nchi)*1e-3
+
+    for angarr in (phi_values, chi_values):
         assert np.median(angarr)==0
 
-    dth = theta_values[1]-theta_values[0]
     dphi = phi_values[1]-phi_values[0]
     dchi = chi_values[1]-chi_values[0]
 
-    print( 'Number of scan points is: ', (len( theta_values ) * len( phi_values ) * len( chi_values )) )
-    print('theta resolution is: ', dth*1e3, 'mrad')
-    print('phi resolution is: ', dphi*1e3, 'mrad')
-    print('chi resolution is: ', dchi*1e3, 'mrad')
+    PHI, CHI = np.meshgrid(phi_values, chi_values, indexing="ij")
 
-    PHI, CHI, THETA = np.meshgrid(
-        phi_values, chi_values, crl.theta + theta_values, indexing="ij"
-    )
-
-    def strain_mosa_scan(
+    def mosa_scan(
         hkl,
-        theta_values,
         phi_values,
         chi_values,
         crystal,
@@ -161,67 +161,52 @@ if __name__ == "__main__":
         detector,
         beam,
         resolution_function,
-        signal_to_noise=100000,
-        verbose=False,
+        signal_to_noise=1000000,
     ):
-        """Simulate a strain-mosaicity scan in theta, phi and chi."""
+        """Simulate a mosaicity scan in phi and chi."""
 
         phi0 = crystal.goniometer.phi
         chi0 = crystal.goniometer.chi
-        th0 = crl.theta
 
-        strain_mosa = np.zeros(
+        mosa = np.zeros(
             (
                 detector.det_row_count,
                 detector.det_col_count,
-                len(theta_values),
                 len(phi_values),
                 len(chi_values),
             )
         )
 
-        for i in range(len(theta_values)):
+        for i in range(len(phi_values)):
+            for j in range(len(chi_values)):
 
-            crl.goto(theta=th0 + theta_values[i], eta=crl.eta)
-            detector.remount_to_crl(crl)
-            resolution_function.theta_shift(th0 + theta_values[i])
+                crystal.goniometer.phi = phi_values[i]
+                crystal.goniometer.chi = chi_values[j]
 
-            for j in range(len(phi_values)):
-                for k in range(len(chi_values)):
+                mosa[:, :, i, j] = crystal.diffract(
+                    hkl,
+                    resolution_function,
+                    crl,
+                    detector,
+                    beam,
+                )
 
-                    if verbose:
-                        print(theta_values[i], phi_values[j], chi_values[k])
-                    crystal.goniometer.phi = phi_values[j]
-                    crystal.goniometer.chi = chi_values[k]
-
-                    strain_mosa[:, :, i, j, k] = crystal.diffract(
-                        hkl,
-                        resolution_function,
-                        crl,
-                        detector,
-                        beam,
-                    )
-
-        crl.goto(theta=th0, eta=crl.eta)
-        detector.remount_to_crl(crl)
-        resolution_function.theta_shift(th0)
         crystal.goniometer.phi = phi0
         crystal.goniometer.chi = chi0
 
-        noise_level = np.max(strain_mosa) / signal_to_noise
-        strain_mosa += np.abs(np.random.normal(0, noise_level, size=strain_mosa.shape))
-        strain_mosa /= np.max(strain_mosa)
-        strain_mosa *= 64000
-        strain_mosa = strain_mosa.round().astype(np.uint16)
+        noise_level = np.max(mosa) / signal_to_noise
+        mosa += np.abs(np.random.normal(0, noise_level, size=mosa.shape))
+        mosa /= np.max(mosa)
+        mosa *= 64000
+        mosa = mosa.round().astype(np.uint16)
 
-        return strain_mosa
+        return mosa
 
     pr = cProfile.Profile()
     pr.enable()
     t1 = time.perf_counter()
-    strain_mosa = strain_mosa_scan(
+    mosa = mosa_scan(
         hkl,
-        theta_values,
         phi_values,
         chi_values,
         crystal,
@@ -237,10 +222,7 @@ if __name__ == "__main__":
     ps.print_stats(15)
     print("\n\nCPU time is : ", t2 - t1, "s")
 
-
-    mu, cov = darling.properties.moments(
-        strain_mosa, coordinates=(theta_values, phi_values, chi_values)
-    )
+    mu, cov = darling.properties.moments(mosa, coordinates=(phi_values, chi_values))
 
     fontsize = 16 # General font size for all text
     ticksize= 16 # tick size
@@ -248,33 +230,31 @@ if __name__ == "__main__":
     plt.rcParams['xtick.labelsize'] = ticksize
     plt.rcParams['ytick.labelsize'] = ticksize
 
-    m1 = strain_mosa[85,71,len(theta_values)//2,:,:]
-    T,P,C = np.meshgrid(theta_values, phi_values, chi_values, indexing='ij')
-    chimean1 = np.sum(strain_mosa[85,71]*C)/np.sum(strain_mosa[85,71])
-    m2 = strain_mosa[85,71,len(theta_values)//2,:,:]
-    chimean2 = np.sum(strain_mosa[85,72]*C)/np.sum(strain_mosa[85,71])
+    m1 = mosa[85,71,:,:]
+    P,C = np.meshgrid(phi_values, chi_values, indexing='ij')
+    chimean1 = np.sum(mosa[85,107]*C)/np.sum(mosa[85,71])
+    m2 = mosa[85,71,:,:]
+    chimean2 = np.sum(mosa[85,108]*C)/np.sum(mosa[85,71])
     print(chimean1)
     print(chimean2)
 
     fig, ax = plt.subplots(1, 2, figsize=(14,7))
-    im = ax[0].imshow(strain_mosa[85,71,len(theta_values)//2,:,:])
+    im = ax[0].imshow(mosa[85,107,:,:])
     fig.colorbar(im, ax=ax[0], fraction=0.046, pad=0.04)
-    im = ax[1].imshow(strain_mosa[85,72,len(theta_values)//2,:,:])
+    im = ax[1].imshow(mosa[85,108,:,:])
     fig.colorbar(im, ax=ax[1], fraction=0.046, pad=0.04)
     plt.tight_layout()
 
-    fig, ax = plt.subplots(1, 3, figsize=(16, 6))
-    for i in range(3):
+    fig, ax = plt.subplots(1, 2, figsize=(16, 6))
+    for i in range(2):
         if i == 0:
             im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.09, vmax=0.09)
         if i == 1:
-            im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.09, vmax=0.09)
-        if i == 2:
             im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.02, vmax=0.02)
 
         cbar = fig.colorbar(im, ax=ax[i], fraction=0.046, pad=0.04)
         ax[i].set_title(
-            r"Mean " + [r"$\theta$", r"$\phi$", r"$\chi$"][i] + " [mrad]", fontsize=16
+            r"Mean " + [r"$\phi$", r"$\chi$"][i] + " [mrad]", fontsize=16
         )
         ax[i].set_xlabel("y [pixels]", fontsize=16)
         if i == 0:
@@ -301,78 +281,43 @@ if __name__ == "__main__":
 
     Q_true = expected_Q(crystal, beam, detector)
 
-    mask = np.sum(strain_mosa, axis=(-1, -2, -3))
-    # fig, ax = plt.subplots(1, 1, figsize=(7,7))
-    # im = ax.imshow(mask)
-    # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    # plt.tight_layout()
-
+    mask = np.sum(mosa, axis=(-1, -2))
     mask = mask > np.max(mask)*0.15
+
 
     # sample space recon
     # R @ Q_sample = Q_lab_0 => Q_sample = R_ij.T @ Q_lab_0
     Q_rec = np.zeros((mu.shape[0], mu.shape[1], 3))
-    q_sample_0 = crystal.UB_0 @ hkl / np.linalg.norm(crystal.UB_0 @ hkl)
+    Q_sample_0 = crystal.UB_0 @ hkl
     for i in range(mu.shape[0]):
         for j in range(mu.shape[1]):
-            R_s = crystal.goniometer.get_R_top(mu[i, j, 1], mu[i, j, 2])
-            d_rec = lambda_0 / (2*np.sin(crl.theta + mu[i, j, 0]))
-            Q_norm = 2*np.pi / d_rec
-
-            s,c = np.sin(mu[i, j, 0]), np.cos(mu[i, j, 0])
-            Ry_dth = np.array([[c,0,s],[0,1,0],[-s,0,c]])
-            Q_rec[i, j] = R_s.T @ (Ry_dth.T @ q_sample_0) * Q_norm
+            R_s = crystal.goniometer.get_R_top(mu[i, j, 0], mu[i, j, 1])
+            Q_rec[i, j] = R_s.T @ Q_sample_0
 
     Q_true[~mask,:]= np.nan
     Q_rec[~mask,:]= np.nan
 
-    d_field_rec = (2*np.pi) / np.linalg.norm(Q_rec, axis=-1)
-    d_field_true = (2*np.pi) / np.linalg.norm(Q_true, axis=-1)
-    hkl_strain_rec = (d_field_rec - d_0) / d_0
-    hkl_strain_true =  (d_field_true - d_0) / d_0
-
-    fig, ax = plt.subplots(2, 3, figsize=(16, 12))
+    fig, ax = plt.subplots(2, 3, figsize=(14, 9))
     fig.suptitle(
         r"True and reconstructed Q vectors (in lab)",
-        fontsize=32,
+        fontsize=16,
     )
     for j in range(2):
         Qs = [Q_true, Q_rec]
         _Q = Qs[j]
         title = [r"True ", r"Estimated "][j]
         for i in range(3):
-            im = ax[j, i].imshow(_Q[:, :, i])
+            im = ax[j, i].imshow(_Q[:, :, i], cmap="plasma")
             cbar = fig.colorbar(im, ax=ax[j, i], fraction=0.046, pad=0.04)
             ax[j, i].set_title(
-                title
-                + [r"$Q_x$", r"$Q_y$", r"$Q_z$"][i],
-                fontsize=32,
+                title + [r"Q$_x$", r"Q$_y$", r"Q$_z$"][i],
+                fontsize=16,
             )
             if j == 1:
                 ax[j, i].set_xlabel("y [pixels]", fontsize=16)
-            ax[j, i].set_ylabel("z [pixels]", fontsize=16)
+            if i == 0:
+                ax[j, i].set_ylabel("z [pixels]", fontsize=16)
             ax[j, i].tick_params(axis="both", which="major", labelsize=16)
             cbar.ax.tick_params(labelsize=16)
     plt.tight_layout()
-
-
-    fig, ax = plt.subplots(1, 2, figsize=(14,7))
-    fig.suptitle(
-        r"True and reconstructed strain in hkl direction: ($d_0$ - d) / $d_0$ )",
-        fontsize=32,
-    )
-    strains = [hkl_strain_true, hkl_strain_rec]
-    cmaps = ['viridis','viridis']
-    titles = ['True', 'Recon']
-    for i in range(2):
-        im = ax[i].imshow(strains[i], cmap=cmaps[i])
-        fig.colorbar(im, ax=ax[i], fraction=0.046, pad=0.04)
-        ax[i].set_title(titles[i])
-    ax[0].set_xlabel("y [pixels]", fontsize=16)
-    ax[1].set_xlabel("y [pixels]", fontsize=16)
-    ax[0].set_ylabel("z [pixels]", fontsize=16)
-    plt.tight_layout()
-
     plt.show()
-
-
