@@ -129,6 +129,9 @@ class GpuProjector(object):
             d0 + (dy * self.det_col_count / 2.0) + (dz * self.det_row_count / 2.0)
         )
 
+        # For precision in astra, does not change the projection.
+        normalized_detector_center = detector_center / np.linalg.norm(detector_center)
+
         # vector from pixel (0,0) to (0,1) i.e detector cols
         u = -dy / (voxel_size * self.super_sampling)
 
@@ -136,7 +139,7 @@ class GpuProjector(object):
         v = -dz / (voxel_size * self.super_sampling)
 
 
-        return np.concatenate((ray_direction, detector_center, u, v)).reshape(1, 12)
+        return np.concatenate((ray_direction, normalized_detector_center, u, v)).reshape(1, 12)
 
 
 if __name__ == "__main__":

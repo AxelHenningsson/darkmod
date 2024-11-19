@@ -11,11 +11,19 @@ from darkmod import laue
 from darkmod.beam import GaussianLineBeam
 from darkmod.crl import CompundRefractiveLens
 from darkmod.crystal import Crystal
-from darkmod.deformation import linear_gradient, rotation_gradient, unity_field
+from darkmod.deformation import linear_gradient, rotation_gradient, unity_field, multi_gradient
 from darkmod.detector import Detector
 from darkmod.laue import keV_to_angstrom
 from darkmod.resolution import DualKentGauss, PentaGauss, TruncatedPentaGauss
 plt.style.use('dark_background')
+
+fontsize = 16 # General font size for all text
+ticksize= 16 # tick size
+plt.rcParams['font.size'] = fontsize
+plt.rcParams['xtick.labelsize'] = ticksize
+plt.rcParams['ytick.labelsize'] = ticksize
+plt.style.use('dark_background')
+from darkmod.utils import crop
 
 if __name__ == "__main__":
 
@@ -54,19 +62,29 @@ if __name__ == "__main__":
     dx = xg[1] - xg[0]
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
 
-    # defgrad = unity_field(X.shape)
-    defgrad = linear_gradient(
-      X.shape,
-       component=(2, 2),
-       axis=0,
-       magnitude=0.001,
-    )
-    # defgrad = rotation_gradient(
-    # X.shape,
-    # rotation_axis=np.array([0, 1, 0]),
-    # axis=1,
-    # magnitude=1e-4,
+    #defgrad = unity_field(X.shape)
+    # defgrad = linear_gradient(
+    #   X.shape,
+    #    component=(2, 2),
+    #    axis=2,
+    #    magnitude=0.001,
     # )
+    defgrad = rotation_gradient(
+    X.shape,
+    rotation_axis=np.array([0, 1, 0]),
+    axis=1,
+    magnitude=1e-4,
+    )
+
+    defgrad = multi_gradient(
+        X.shape,
+        component=(2, 2),
+        rotation_axis=np.array([1, 1, 1]),
+        axis=2,
+        rot_magnitude=1e-4,
+        strain_magnitude=0.001,
+    )
+
     crystal.discretize(X, Y, Z, defgrad)
     crystal.write("strain_gradient")
 
@@ -114,22 +132,24 @@ if __name__ == "__main__":
     print("pixel_size", pixel_size)
 
     detector = Detector.wall_mount(
-        crl, pixel_size, det_row_count, det_col_count, super_sampling=1
+        crl, pixel_size, det_row_count, det_col_count, super_sampling=4
     )
 
     beam = GaussianLineBeam(z_std=0.1, energy=energy)
+    
+    eps = crystal.get_hkl_strain(hkl)
+    eps_z = np.abs(eps).max()
 
-    F = crystal.defgrad[0, 16, 16]
-    eps = (F.T@F - np.eye(3))/2.
-    eps_z = eps[2,2]
 
     theta_deformed = np.arcsin( lambda_0 / (2 * d_0*(1+eps_z)) )
     theta_range = 2*(crl.theta - theta_deformed)
+    print('strain amplitude', eps_z*1e4, ' 1e-4')
     print('theta range: ', np.round(np.abs(theta_range*1e3),3), 'mrad')
 
-    pad = np.abs(crl.theta - theta_deformed) * 1e3
-    ntheta = 11
-    nphi = 11
+    pad = 0.5 * np.abs(crl.theta - theta_deformed) * 1e3
+    #pad = 0.2
+    ntheta = 15
+    nphi = 15
     nchi = 5
     theta_values = np.linspace(-1 - pad, 1 + pad, ntheta)*1e-3
     phi_values = np.linspace(-0.05 - pad, 0.05 + pad, nphi)*1e-3
@@ -161,7 +181,6 @@ if __name__ == "__main__":
         detector,
         beam,
         resolution_function,
-        signal_to_noise=100000,
         verbose=False,
     ):
         """Simulate a strain-mosaicity scan in theta, phi and chi."""
@@ -208,10 +227,18 @@ if __name__ == "__main__":
         crystal.goniometer.phi = phi0
         crystal.goniometer.chi = chi0
 
-        noise_level = np.max(strain_mosa) / signal_to_noise
-        strain_mosa += np.abs(np.random.normal(0, noise_level, size=strain_mosa.shape))
+        # the noise model
+        lam = 2.267
+        mu = 99.453
+        std = 2.317
+        shot_noise  = np.random.poisson(lam=lam, size=strain_mosa.shape)
+        thermal_noise = np.random.normal(loc=mu, scale=std, size=strain_mosa.shape)
+        noise = thermal_noise + shot_noise
+
         strain_mosa /= np.max(strain_mosa)
-        strain_mosa *= 64000
+        strain_mosa *= (64000 - 200) # we simulate that we use close to the full range of the camera
+        strain_mosa += noise
+
         strain_mosa = strain_mosa.round().astype(np.uint16)
 
         return strain_mosa
@@ -237,16 +264,35 @@ if __name__ == "__main__":
     ps.print_stats(15)
     print("\n\nCPU time is : ", t2 - t1, "s")
 
+    fig, ax = plt.subplots(1, 1, figsize=(7,7))
+    strth = r'$\Delta \theta$ = '+str(np.round(theta_values[4]*1e3,2))+', '
+    strphi = r'$\Delta \phi$ = '+str(np.round(phi_values[6]*1e3,2))+', '
+    strchi = r'$\Delta \chi$ = '+str(np.round(chi_values[2]*1e3,2))
+    strtitle = 'Detector image\n '+ strth + strphi + strchi + ' mrad'
+    ax.set_title(strtitle)
+    im = ax.imshow(strain_mosa[:,:,4,6,2],cmap='plasma')
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    plt.tight_layout()
+
+
+    print('Subtracting background...')
+    background = np.median(strain_mosa[:,0:5,:,:]).astype(np.uint16)
+    print( 'background', background)
+    strain_mosa.clip(background, out=strain_mosa)
+    strain_mosa -= background
+
+    mask = np.sum(strain_mosa, axis=(-1, -2, -3))
+    # fig, ax = plt.subplots(1, 1, figsize=(7,7))
+    # im = ax.imshow(mask)
+    # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    # plt.tight_layout()
+
+    mask = mask > np.max(mask)*0.05
 
     mu, cov = darling.properties.moments(
         strain_mosa, coordinates=(theta_values, phi_values, chi_values)
     )
 
-    fontsize = 16 # General font size for all text
-    ticksize= 16 # tick size
-    plt.rcParams['font.size'] = fontsize
-    plt.rcParams['xtick.labelsize'] = ticksize
-    plt.rcParams['ytick.labelsize'] = ticksize
 
     m1 = strain_mosa[85,71,len(theta_values)//2,:,:]
     T,P,C = np.meshgrid(theta_values, phi_values, chi_values, indexing='ij')
@@ -264,21 +310,24 @@ if __name__ == "__main__":
     plt.tight_layout()
 
     fig, ax = plt.subplots(1, 3, figsize=(16, 6))
+    _mu = crop(mu, mask)
     for i in range(3):
-        if i == 0:
-            im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.09, vmax=0.09)
-        if i == 1:
-            im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.09, vmax=0.09)
-        if i == 2:
-            im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.02, vmax=0.02)
+        #im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet")
 
-        cbar = fig.colorbar(im, ax=ax[i], fraction=0.046, pad=0.04)
-        ax[i].set_title(
-            r"Mean " + [r"$\theta$", r"$\phi$", r"$\chi$"][i] + " [mrad]", fontsize=16
-        )
-        ax[i].set_xlabel("y [pixels]", fontsize=16)
         if i == 0:
-            ax[i].set_ylabel("z [pixels]", fontsize=16)
+            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.065, vmax=0.065)
+        if i == 1:
+            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.065, vmax=0.065)
+        if i == 2:
+            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.012, vmax=0.012)
+
+        cbar = fig.colorbar(im, ax=ax[i], fraction=0.046 / 2., pad=0.04)
+        ax[i].set_title(
+            r"Mean " + [r"$\Delta \theta$", r"$\phi$", r"$\chi$"][i] + " [mrad]"
+        )
+        ax[i].set_xlabel("y [pixels]")
+        if i == 0:
+            ax[i].set_ylabel("z [pixels]")
         ax[i].tick_params(axis="both", which="major", labelsize=16)
         cbar.ax.tick_params(labelsize=16)
     plt.tight_layout()
@@ -301,13 +350,6 @@ if __name__ == "__main__":
 
     Q_true = expected_Q(crystal, beam, detector)
 
-    mask = np.sum(strain_mosa, axis=(-1, -2, -3))
-    # fig, ax = plt.subplots(1, 1, figsize=(7,7))
-    # im = ax.imshow(mask)
-    # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    # plt.tight_layout()
-
-    mask = mask > np.max(mask)*0.15
 
     # sample space recon
     # R @ Q_sample = Q_lab_0 => Q_sample = R_ij.T @ Q_lab_0
@@ -323,8 +365,8 @@ if __name__ == "__main__":
             Ry_dth = np.array([[c,0,s],[0,1,0],[-s,0,c]])
             Q_rec[i, j] = R_s.T @ (Ry_dth.T @ q_sample_0) * Q_norm
 
-    Q_true[~mask,:]= np.nan
-    Q_rec[~mask,:]= np.nan
+    # Q_true[~mask,:]= np.nan
+    # Q_rec[~mask,:]= np.nan
 
     d_field_rec = (2*np.pi) / np.linalg.norm(Q_rec, axis=-1)
     d_field_true = (2*np.pi) / np.linalg.norm(Q_true, axis=-1)
@@ -334,23 +376,24 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(2, 3, figsize=(16, 12))
     fig.suptitle(
         r"True and reconstructed Q vectors (in lab)",
-        fontsize=32,
     )
     for j in range(2):
         Qs = [Q_true, Q_rec]
         _Q = Qs[j]
+        _Q[np.abs(_Q) < 1e-12] = 0
         title = [r"True ", r"Estimated "][j]
         for i in range(3):
-            im = ax[j, i].imshow(_Q[:, :, i])
-            cbar = fig.colorbar(im, ax=ax[j, i], fraction=0.046, pad=0.04)
+            vmin = np.nanmin( crop(Qs[1][:,:,i], mask) )
+            vmax = np.nanmax( crop(Qs[1][:,:,i], mask) )
+            im = ax[j, i].imshow(crop(_Q[:, :, i], mask), vmin=vmin, vmax=vmax)
+            cbar = fig.colorbar(im, ax=ax[j, i], fraction=0.046/2., pad=0.04)
             ax[j, i].set_title(
                 title
                 + [r"$Q_x$", r"$Q_y$", r"$Q_z$"][i],
-                fontsize=32,
             )
             if j == 1:
-                ax[j, i].set_xlabel("y [pixels]", fontsize=16)
-            ax[j, i].set_ylabel("z [pixels]", fontsize=16)
+                ax[j, i].set_xlabel("y [pixels]")
+            ax[j, i].set_ylabel("z [pixels]")
             ax[j, i].tick_params(axis="both", which="major", labelsize=16)
             cbar.ax.tick_params(labelsize=16)
     plt.tight_layout()
@@ -359,18 +402,17 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(1, 2, figsize=(14,7))
     fig.suptitle(
         r"True and reconstructed strain in hkl direction: ($d_0$ - d) / $d_0$ )",
-        fontsize=32,
     )
     strains = [hkl_strain_true, hkl_strain_rec]
-    cmaps = ['viridis','viridis']
+    cmaps = ['RdBu_r','RdBu_r']
     titles = ['True', 'Recon']
     for i in range(2):
-        im = ax[i].imshow(strains[i], cmap=cmaps[i])
-        fig.colorbar(im, ax=ax[i], fraction=0.046, pad=0.04)
+        im = ax[i].imshow(crop(strains[i], mask), cmap=cmaps[i], vmin=-0.00035, vmax=0.00035)
+        fig.colorbar(im, ax=ax[i], fraction=0.046/2., pad=0.04)
         ax[i].set_title(titles[i])
-    ax[0].set_xlabel("y [pixels]", fontsize=16)
-    ax[1].set_xlabel("y [pixels]", fontsize=16)
-    ax[0].set_ylabel("z [pixels]", fontsize=16)
+    ax[0].set_xlabel("y [pixels]")
+    ax[1].set_xlabel("y [pixels]")
+    ax[0].set_ylabel("z [pixels]")
     plt.tight_layout()
 
     plt.show()

@@ -140,6 +140,35 @@ class Crystal(object):
             self._x[2, :] = value.reshape(self._flat_scalar_shape)
 
     @property
+    def green_lagrange_strain(self):
+        """The crystal Green-Lagrange strain tensor in sample coordinates.
+
+        Returns:
+            :obj:`numpy array`: Grid of Green-Lagrange strain tensor, shape=(m,n,o,3,3).
+        """
+        if self._F is None:
+            raise ValueError("Please use discretize() to instantiate the field.")
+        else:
+            E = ( self._F.transpose(0, 2, 1) @ self._F - np.eye(3).reshape(1,3,3) ) /2.
+            return E.reshape(self._grid_tensor_shape)
+
+    def get_hkl_strain(self, hkl):
+        """Elastic strain in the direction of a given hkl.
+
+        Args:
+            :obj:`numpy array`: Miller indices, shape=(3,)
+
+        Returns:
+            :obj:`numpy array`: Grid of directional strain, shape=(m,n,o,3,3).
+        """
+        Q = self._get_Q_sample_flat(hkl)
+        Q_0 = self._get_Q_0_sample_flat(hkl)
+        d = (2*np.pi) / np.linalg.norm( Q, axis=1 )
+        d_0 = (2*np.pi) / np.linalg.norm(Q_0)
+        hkl_strain = (d - d_0) / d_0
+        return hkl_strain.reshape(self._grid_scalar_shape)
+
+    @property
     def defgrad(self):
         """The crystal deformation gradient tensor (F) field in sample coordinates.
 
@@ -403,8 +432,6 @@ class Crystal(object):
         w = beam(x_lab)
         voxel_volume = (p_Q * w).reshape(self._grid_scalar_shape)
 
-        #print('voxel_volume', self._prune_volume(voxel_volume).sum(), 'voxel_size', self.voxel_size,)
-        #print('self.goniometer.R', self.goniometer.R, crl.theta)
 
         image = detector.render(
             #self._prune_volume(voxel_volume),

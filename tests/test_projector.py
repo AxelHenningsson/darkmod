@@ -11,7 +11,7 @@ class TestGpuProjector(unittest.TestCase):
 
     def setUp(self):
 
-        self.debug=False
+        self.debug=True
 
         self.det_row_count = 256
         self.det_col_count = 256
