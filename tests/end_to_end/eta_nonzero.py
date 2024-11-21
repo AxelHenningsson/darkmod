@@ -6,10 +6,11 @@ import darling
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.ndimage import binary_dilation, binary_fill_holes, find_objects, label
-from darkmod import scan
+from scipy.spatial.transform import Rotation
 
 from darkmod import laue
 from darkmod.beam import GaussianLineBeam
+from darkmod import scan
 from darkmod.crl import CompundRefractiveLens
 from darkmod.crystal import Crystal
 from darkmod.deformation import linear_gradient, rotation_gradient, unity_field
@@ -18,8 +19,8 @@ from darkmod.laue import keV_to_angstrom
 from darkmod.resolution import DualKentGauss, PentaGauss, TruncatedPentaGauss
 
 plt.style.use("dark_background")
-fontsize = 16  # General font size for all text
-ticksize = 16  # tick size
+fontsize = 32  # General font size for all text
+ticksize = 32  # tick size
 plt.rcParams["font.size"] = fontsize
 plt.rcParams["xtick.labelsize"] = ticksize
 plt.rcParams["ytick.labelsize"] = ticksize
@@ -34,23 +35,32 @@ if __name__ == "__main__":
     crl = CompundRefractiveLens(
         number_of_lenses, lens_space, lens_radius, refractive_decrement, magnification
     )
-    hkl = np.array([1, -1, 1])
-    energy = 17  # keV
+
+    energy = 19.1  # keV
     lambda_0 = laue.keV_to_angstrom(energy)
 
-    # Instantiate a cubic diamond crystal (Fd3m space group (space group 227)
-    unit_cell = [3.56, 3.56, 3.56, 90.0, 90.0, 90.0]
+    # Instantiate a cubic AL crystal (space group 225)
+    unit_cell = [4.0493, 4.0493, 4.0493, 90., 90., 90.]
 
-    orientation = np.eye(3, 3)
+    orientation = Rotation.random().as_matrix()
     crystal = Crystal(unit_cell, orientation)
 
     # remount the crystal to align Q with z-axis
-    crystal.align(hkl, axis=np.array([0, 0, 1]))
-    crystal.remount()  # this updates U.
+    symmetry_axis = np.array([0,0,1])
+    crystal.align(symmetry_axis, axis=np.array([0,0,1]))
+    crystal.align(np.array([0,1,0]), axis=np.array([0,1,0]), transformation_hkl=symmetry_axis)
+    crystal.align(np.array([1,0,0]), axis=np.array([1,0,0]), transformation_hkl=symmetry_axis)
+    crystal.remount()  # this updates U and zeros the goniometer.
 
     # Find the reflection with goniometer motors.
-    theta, eta = crystal.bring_to_bragg(hkl, energy)
+    #theta, eta = crystal.bring_to_bragg(hkl, energy)
 
+    # TODO add some funcitonaliyt to the crystal to figure this
+    # out automagically
+    hkl = np.array([-1, -1, 3])
+    crystal.goniometer.omega = np.radians(6.431585)
+    eta = np.radians(20.232593)
+    theta = np.radians(15.416837)
     # Bring the CRL to diffracted beam.
     crl.goto(theta, eta)
 
@@ -61,41 +71,21 @@ if __name__ == "__main__":
     dx = xg[1] - xg[0]
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
 
-    # defgrad = linear_gradient(
-    #     X.shape,
-    #     component=(2, 2),
-    #     axis=1,
-    #     magnitude=0.0002,
-    # )
-
-    # defgrad = rotation_gradient(
-    #     X.shape,
-    #     rotation_axis=np.array([1, 1, 0]),
-    #     axis=0,
-    #     magnitude=0.01 * 1e-3,
-    # )
-
-    # defgrad = linear_gradient(
-    #   X.shape,
-    #    component=(2, 2),
-    #    axis=2,
-    #    magnitude=0.001,
-    # )
 
     defgrad = rotation_gradient(
         X.shape,
         rotation_axis=np.array([0, 1, 0]),
-        axis=1,
+        axis=2,
         magnitude = 0.03 * 1e-3,
     )
+
+    #defgrad = unity_field(X.shape)
 
     spatial_artefact = False
     detector_noise = False
 
-    #defgrad = unity_field(X.shape)
-
     crystal.discretize(X, Y, Z, defgrad)
-    crystal.write("strain_gradient")
+    #crystal.write("strain_gradient")
 
     Q_lab = crystal.goniometer.R @ crystal.UB_0 @ hkl
     d_0 = (2 * np.pi) / np.linalg.norm(Q_lab)
@@ -135,15 +125,24 @@ if __name__ == "__main__":
     det_col_count = 256
     pixel_size = crl.magnification * dx * 0.17
 
-
     print("pixel_size", pixel_size)
 
     detector = Detector.orthogonal_mount(
-        crl, pixel_size, det_row_count, det_col_count, super_sampling=1
+        crl, pixel_size, det_row_count, det_col_count, super_sampling=4
     )
 
     beam = GaussianLineBeam(z_std=0.1, energy=energy)
 
+    F = crystal.defgrad[0, X.shape[1]//2, X.shape[2]//2]
+    eps = (F.T @ F - np.eye(3)) / 2.0
+    eps_z = eps[2, 2]
+    theta_deformed = np.arcsin(lambda_0 / (2 * d_0 * (1 + eps_z)))
+    theta_range = 2 * (crl.theta - theta_deformed)
+    print("theta range: ", np.round(np.abs(theta_range * 1e3), 3), "mrad")
+
+    pad = np.abs(crl.theta - theta_deformed) * 1e3
+
+    print(pad)
 
     if 0:
         ######################################################################
@@ -151,7 +150,7 @@ if __name__ == "__main__":
         nphi = 7
         nchi = 7
         phi_values = np.linspace(-0.25, 0.25, nphi) * 1e-3
-        chi_values = np.linspace(-2.5, 2.5, nchi) * 1e-3
+        chi_values = np.linspace(-2.0, 2.0, nchi) * 1e-3
         mosa = scan.phi_chi(
             hkl,
             phi_values,
@@ -178,21 +177,11 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.show()
 
-    F = crystal.defgrad[0, X.shape[1]//2, X.shape[2]//2]
-    eps = (F.T @ F - np.eye(3)) / 2.0
-    eps_z = eps[2, 2]
-    theta_deformed = np.arcsin(lambda_0 / (2 * d_0 * (1 + eps_z)))
-    theta_range = 2 * (crl.theta - theta_deformed)
-    print("theta range: ", np.round(np.abs(theta_range * 1e3), 3), "mrad")
 
-    pad = np.abs(crl.theta - theta_deformed) * 1e3
-
-    print(pad)
-
-    nphi = 31
+    nphi = 41
     nchi = 11
     phi_values = np.linspace(-0.25, 0.25, nphi) * 1e-3
-    chi_values = np.linspace(-2.5, 2.5, nchi) * 1e-3
+    chi_values = np.linspace(-2.0, 2.0, nchi) * 1e-3
 
     for angarr in (phi_values, chi_values):
         assert np.median(angarr) == 0
@@ -200,23 +189,21 @@ if __name__ == "__main__":
     dphi = phi_values[1] - phi_values[0]
     dchi = chi_values[1] - chi_values[0]
 
-    PHI, CHI = np.meshgrid(phi_values, chi_values, indexing="ij")
-
 
     pr = cProfile.Profile()
     pr.enable()
     t1 = time.perf_counter()
     mosa = scan.phi_chi(
-            hkl,
-            phi_values,
-            chi_values,
-            crystal,
-            crl,
-            detector,
-            beam,
-            resolution_function,
-            spatial_artefact,
-            detector_noise,
+        hkl,
+        phi_values,
+        chi_values,
+        crystal,
+        crl,
+        detector,
+        beam,
+        resolution_function,
+        spatial_artefact,
+        detector_noise,
     )
     t2 = time.perf_counter()
     pr.disable()
@@ -224,15 +211,6 @@ if __name__ == "__main__":
     ps = pstats.Stats("tmp_profile_dump").strip_dirs().sort_stats("cumtime")
     ps.print_stats(15)
     print("\n\nCPU time is : ", t2 - t1, "s")
-
-    fig, ax = plt.subplots(1, 1, figsize=(7,7))
-    strphi = r'$\Delta \phi$ = '+str(np.round(phi_values[3]*1e3,2))+', '
-    strchi = r'$\Delta \chi$ = '+str(np.round(chi_values[2]*1e3,2))
-    strtitle = 'Detector image\n '+ strphi + strchi + ' mrad'
-    ax.set_title(strtitle)
-    im = ax.imshow(mosa[:50,:50,3,2],cmap='plasma')
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    plt.tight_layout()
 
     print('Subtracting background...')
     background = np.median(mosa[:,0:5,:,:]).astype(np.uint16)
@@ -251,48 +229,15 @@ if __name__ == "__main__":
     im = ax.imshow(mask)
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     plt.tight_layout()
-    # print('phi', phi_values[3])
-    # print('chi', chi_values[1])
-
-
-    # fig, ax = plt.subplots(1, 2, figsize=(14, 8), sharex=True, sharey=True)
-    # im = ax[0].imshow(np.diff(mosa[:, 50:200, 3, 1].astype(float),axis=1), cmap="jet")
-    # fig.colorbar(im, ax=ax[0], fraction=0.046, pad=0.04)
-    # im = ax[1].imshow(np.diff(mosa[:, 50:200, 3, 3].astype(float),axis=1), cmap="jet")
-    # fig.colorbar(im, ax=ax[1], fraction=0.046, pad=0.04)
-    # plt.tight_layout()
-    # plt.show()
-
-    # row_index = 76
-    # col_index = 107
-    # m1 = mosa[row_index, 71, :, :]
-    # P, C = np.meshgrid(phi_values, chi_values, indexing="ij")
-    # chimean1 = np.sum(mosa[row_index, col_index] * C) / np.sum(mosa[85, 71])
-    # m2 = mosa[row_index, 71, :, :]
-    # chimean2 = np.sum(mosa[row_index, col_index + 1] * C) / np.sum(mosa[85, 71])
-
-    # im1 = mosa[row_index, col_index, :, :].astype(float)
-    # im2 = mosa[row_index, col_index + 1, :, :].astype(float)
-
-    # fig, ax = plt.subplots(1, 3, figsize=(14, 5))
-    # fig.suptitle(str(chimean1) + ",  " + str(chimean2))
-    # im = ax[0].imshow(im1, cmap="jet")
-    # fig.colorbar(im, ax=ax[0], fraction=0.046, pad=0.04)
-    # im = ax[1].imshow(im2, cmap="jet")
-    # fig.colorbar(im, ax=ax[1], fraction=0.046, pad=0.04)
-    # im = ax[2].imshow(im2 - im1, cmap="RdBu_r")
-    # fig.colorbar(im, ax=ax[2], fraction=0.046, pad=0.04)
-    # plt.tight_layout()
-    # plt.show()
 
     mu, cov = darling.properties.moments(mosa, coordinates=(phi_values, chi_values))
 
     fig, ax = plt.subplots(1, 2, figsize=(16, 6))
     for i in range(2):
         if i == 0:
-            im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.0006, vmax=0.0006  )
+            im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.001, vmax=0.001  )
         if i == 1:
-            im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.007, vmax=0.007)
+            im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.006, vmax=0.006)
 
         cbar = fig.colorbar(im, ax=ax[i], fraction=0.046, pad=0.04)
         ax[i].set_title(r"Mean " + [r"$\phi$", r"$\chi$"][i] + " [mrad]", fontsize=16)
@@ -302,7 +247,8 @@ if __name__ == "__main__":
         ax[i].tick_params(axis="both", which="major", labelsize=16)
         cbar.ax.tick_params(labelsize=16)
     plt.tight_layout()
-    plt.show()
+
+
     if 1:
         # We expect to be able to approximate the mean Q vector along the ray paths.
         def expected_Q(crystal, beam, detector):

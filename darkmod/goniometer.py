@@ -3,9 +3,6 @@ import pandas as pd
 from scipy.spatial.transform import Rotation
 
 from darkmod import laue
-
-# TODO: implement non-zero etas
-
 from darkmod.transforms import HighPrecisionRotation
 
 

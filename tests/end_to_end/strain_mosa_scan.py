@@ -9,6 +9,7 @@ from scipy.ndimage import binary_dilation, binary_fill_holes, find_objects, labe
 
 from darkmod import laue
 from darkmod.beam import GaussianLineBeam
+from darkmod import scan
 from darkmod.crl import CompundRefractiveLens
 from darkmod.crystal import Crystal
 from darkmod.deformation import linear_gradient, rotation_gradient, unity_field, multi_gradient
@@ -69,21 +70,25 @@ if __name__ == "__main__":
     #    axis=2,
     #    magnitude=0.001,
     # )
-    defgrad = rotation_gradient(
-    X.shape,
-    rotation_axis=np.array([0, 1, 0]),
-    axis=1,
-    magnitude=1e-4,
-    )
+
+    # defgrad = rotation_gradient(
+    # X.shape,
+    # rotation_axis=np.array([0, 1, 0]),
+    # axis=1,
+    # magnitude=1e-4,
+    # )
 
     defgrad = multi_gradient(
         X.shape,
-        component=(2, 2),
-        rotation_axis=np.array([1, 1, 1]),
-        axis=2,
+        component=(0, 1),
+        rotation_axis=np.array([1, -1, 1]),
+        axis=1,
         rot_magnitude=1e-4,
         strain_magnitude=0.001,
     )
+
+    spatial_artefact = True
+    detector_noise = True
 
     crystal.discretize(X, Y, Z, defgrad)
     crystal.write("strain_gradient")
@@ -147,7 +152,7 @@ if __name__ == "__main__":
     print('theta range: ', np.round(np.abs(theta_range*1e3),3), 'mrad')
 
     pad = 0.5 * np.abs(crl.theta - theta_deformed) * 1e3
-    #pad = 0.2
+    pad = 0.2
     ntheta = 15
     nphi = 15
     nchi = 5
@@ -167,86 +172,11 @@ if __name__ == "__main__":
     print('phi resolution is: ', dphi*1e3, 'mrad')
     print('chi resolution is: ', dchi*1e3, 'mrad')
 
-    PHI, CHI, THETA = np.meshgrid(
-        phi_values, chi_values, crl.theta + theta_values, indexing="ij"
-    )
-
-    def strain_mosa_scan(
-        hkl,
-        theta_values,
-        phi_values,
-        chi_values,
-        crystal,
-        crl,
-        detector,
-        beam,
-        resolution_function,
-        verbose=False,
-    ):
-        """Simulate a strain-mosaicity scan in theta, phi and chi."""
-
-        phi0 = crystal.goniometer.phi
-        chi0 = crystal.goniometer.chi
-        th0 = crl.theta
-
-        strain_mosa = np.zeros(
-            (
-                detector.det_row_count,
-                detector.det_col_count,
-                len(theta_values),
-                len(phi_values),
-                len(chi_values),
-            )
-        )
-
-        for i in range(len(theta_values)):
-
-            crl.goto(theta=th0 + theta_values[i], eta=crl.eta)
-            detector.remount_to_crl(crl)
-            resolution_function.theta_shift(th0 + theta_values[i])
-
-            for j in range(len(phi_values)):
-                for k in range(len(chi_values)):
-
-                    if verbose:
-                        print(theta_values[i], phi_values[j], chi_values[k])
-                    crystal.goniometer.phi = phi_values[j]
-                    crystal.goniometer.chi = chi_values[k]
-
-                    strain_mosa[:, :, i, j, k] = crystal.diffract(
-                        hkl,
-                        resolution_function,
-                        crl,
-                        detector,
-                        beam,
-                    )
-
-        crl.goto(theta=th0, eta=crl.eta)
-        detector.remount_to_crl(crl)
-        resolution_function.theta_shift(th0)
-        crystal.goniometer.phi = phi0
-        crystal.goniometer.chi = chi0
-
-        # the noise model
-        lam = 2.267
-        mu = 99.453
-        std = 2.317
-        shot_noise  = np.random.poisson(lam=lam, size=strain_mosa.shape)
-        thermal_noise = np.random.normal(loc=mu, scale=std, size=strain_mosa.shape)
-        noise = thermal_noise + shot_noise
-
-        strain_mosa /= np.max(strain_mosa)
-        strain_mosa *= (64000 - 200) # we simulate that we use close to the full range of the camera
-        strain_mosa += noise
-
-        strain_mosa = strain_mosa.round().astype(np.uint16)
-
-        return strain_mosa
 
     pr = cProfile.Profile()
     pr.enable()
     t1 = time.perf_counter()
-    strain_mosa = strain_mosa_scan(
+    strain_mosa = scan.theta_phi_chi(
         hkl,
         theta_values,
         phi_values,
@@ -256,6 +186,8 @@ if __name__ == "__main__":
         detector,
         beam,
         resolution_function,
+        spatial_artefact,
+        detector_noise,
     )
     t2 = time.perf_counter()
     pr.disable()

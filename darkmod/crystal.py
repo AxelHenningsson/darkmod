@@ -1,13 +1,11 @@
 import matplotlib.pyplot as plt
+import meshio
 import numpy as np
 import pandas as pd
 from scipy.spatial.transform import Rotation
 
-from darkmod.goniometer import Goniometer
 from darkmod import laue
-
-import meshio
-
+from darkmod.goniometer import Goniometer
 
 # TODO: implement non-zero eta diffraction alignments.
 
@@ -140,7 +138,7 @@ class Crystal(object):
             self._x[2, :] = value.reshape(self._flat_scalar_shape)
 
     @property
-    def green_lagrange_strain(self):
+    def green_lagdefgradrange_strain(self):
         """The crystal Green-Lagrange strain tensor in sample coordinates.
 
         Returns:
@@ -149,7 +147,9 @@ class Crystal(object):
         if self._F is None:
             raise ValueError("Please use discretize() to instantiate the field.")
         else:
-            E = ( self._F.transpose(0, 2, 1) @ self._F - np.eye(3).reshape(1,3,3) ) /2.
+            E = (
+                self._F.transpose(0, 2, 1) @ self._F - np.eye(3).reshape(1, 3, 3)
+            ) / 2.0
             return E.reshape(self._grid_tensor_shape)
 
     def get_hkl_strain(self, hkl):
@@ -163,8 +163,8 @@ class Crystal(object):
         """
         Q = self._get_Q_sample_flat(hkl)
         Q_0 = self._get_Q_0_sample_flat(hkl)
-        d = (2*np.pi) / np.linalg.norm( Q, axis=1 )
-        d_0 = (2*np.pi) / np.linalg.norm(Q_0)
+        d = (2 * np.pi) / np.linalg.norm(Q, axis=1)
+        d_0 = (2 * np.pi) / np.linalg.norm(Q_0)
         hkl_strain = (d - d_0) / d_0
         return hkl_strain.reshape(self._grid_scalar_shape)
 
@@ -295,25 +295,70 @@ class Crystal(object):
     def _get_Q_0_sample_flat(self, hkl):
         return self.U @ (self.B @ hkl)
 
-    def align(self, hkl, axis):
+    def align(self, hkl, axis, transformation_hkl=None):
         """
-        Align the crystal orientation matrix (U) such that the G-vector of the provided Miller indices (hkl)
-        is parallel to a given real space axis.
+        Align the crystal orientation matrix (U) such that the Q-vector of the
+        provided Miller indices (hkl) is parallel to a given real space axis.
 
         Args:
             hkl (:obj:`numpy array`): Miller indices to align with, ``shape=(3,)``.
             axis (:obj:`numpy array`): Vector to align with, ``shape=(3,)``.
+            transformation_hkl (:obj:`numpy array`): Axis to rotate around for alignment given in Miller
+                indices ``shape=(3,)``. Must be orthogonal to hkl. Defaults to None, in which case an axis
+                is inferred wither by cross products or a random selection.
 
         """
-        Q_0 = self._get_Q_0_sample_flat(hkl)
+        Q_0 = self.goniometer.R @ self._get_Q_0_sample_flat(hkl)
         nhat = Q_0 / np.linalg.norm(Q_0)
         axis = axis / np.linalg.norm(axis)
-        primary_rotation_vector = np.cross(nhat, axis)
-        primary_rotation_vector /= np.linalg.norm(primary_rotation_vector)
-        angle = np.arccos(nhat @ axis)
 
-        rotation = Rotation.from_rotvec(primary_rotation_vector * angle)
-        self.goniometer.goto(rotation=rotation)
+        if np.arccos(np.dot(nhat, axis)) > np.radians(
+            1e-9
+        ):  # already aligned within a nano degree
+
+            if transformation_hkl is not None:
+                primary_rotation_vector = self.goniometer.R @ (
+                    self.U @ self.B @ transformation_hkl
+                )
+                assert np.allclose(
+                    np.dot(primary_rotation_vector, nhat), 0
+                ), "Transformation hkl need to be orthogonal to hkl"
+                primary_rotation_vector *= np.sign(
+                    np.dot(primary_rotation_vector, np.cross(nhat, axis))
+                )
+            elif (
+                np.abs(np.dot(nhat, axis) + 1) < 1e-8
+            ):  # 180 degrees apart the cross product breaks down
+                primary_rotation_vector = np.random.normal(size=(3,))
+                primary_rotation_vector -= (primary_rotation_vector @ nhat) * nhat
+            else:
+                primary_rotation_vector = np.cross(nhat, axis)
+
+            primary_rotation_vector /= np.linalg.norm(primary_rotation_vector)
+            angle = np.arccos(nhat @ axis)
+
+            rotation = Rotation.from_rotvec(primary_rotation_vector * angle)
+            self.goniometer.goto(rotation=rotation * self.goniometer.R.scipy_rotation)
+
+    # def align(self, hkl, axis):
+    #     """
+    #     Align the crystal orientation matrix (U) such that the G-vector of the provided Miller indices (hkl)
+    #     is parallel to a given real space axis.
+
+    #     Args:
+    #         hkl (:obj:`numpy array`): Miller indices to align with, ``shape=(3,)``.
+    #         axis (:obj:`numpy array`): Vector to align with, ``shape=(3,)``.
+
+    #     """
+    #     Q_0 = self._get_Q_0_sample_flat(hkl)
+    #     nhat = Q_0 / np.linalg.norm(Q_0)
+    #     axis = axis / np.linalg.norm(axis)
+    #     primary_rotation_vector = np.cross(nhat, axis)
+    #     primary_rotation_vector /= np.linalg.norm(primary_rotation_vector)
+    #     angle = np.arccos(nhat @ axis)
+
+    #     rotation = Rotation.from_rotvec(primary_rotation_vector * angle)
+    #     self.goniometer.goto(rotation=rotation)
 
     def bring_to_bragg(self, hkl, energy):
         """
@@ -421,20 +466,45 @@ class Crystal(object):
         end = len(non_zero_slice_mask) - np.argmax(non_zero_slice_mask[::-1]) - 1
         return voxel_volume[:, :, start : end + 1]
 
-    def diffract(self, hkl, resolution_function, crl, detector, beam):
+    def diffract(
+        self,
+        hkl,
+        resolution_function,
+        crl,
+        detector,
+        beam,
+        spatial_artefact=True,
+    ):
+        """Simulate diffraction from the crystal given a DFXM setup.
+
+        Args:
+            hkl (:obj:`numpy array`): The diffracting Miller indices.
+            resolution_function (:obj:`darkmod.resolution`): The microscope resolution function.
+            crl (:obj:`darkmod.crl.CompundRefractiveLens`): The compund refractive lens.
+            detector (:obj:`darkmod.detector.Detector`): The detector.
+            beam (:obj:`darkmod.detector.Beam`): The x-ray beam.
+            spatial_artefact (bool, optional): Simulate artefacts due to spatial offset from 
+                the optical axis causing a shift in the mean of the resolution function. Defaults to True.
+
+        Returns:
+            :obj:`numpy array`: A 2D detector image.
+        """
         Q_lab_flat = self.goniometer.R @ self._get_Q_sample_flat(hkl).T
 
         x_lab = self.goniometer.R @ self._x
-        angular_crl_shifts = crl.get_angular_shifts(x_lab)
+
+        if spatial_artefact:
+            angular_crl_shifts = crl.get_angular_shifts(x_lab)
+        else:
+            angular_crl_shifts = None
+
         p_Q = resolution_function(Q_lab_flat, angular_crl_shifts=angular_crl_shifts)
-        #p_Q = resolution_function(Q_lab_flat)
 
         w = beam(x_lab)
         voxel_volume = (p_Q * w).reshape(self._grid_scalar_shape)
 
-
         image = detector.render(
-            #self._prune_volume(voxel_volume),
+            # self._prune_volume(voxel_volume),
             voxel_volume,
             self.voxel_size,
             crl,
@@ -469,14 +539,14 @@ class Crystal(object):
 
 if __name__ == "__main__":
 
-    from darkmod.beam import GaussianLineBeam
-    from darkmod.detector import Detector
-    from darkmod.resolution import DualKentGauss, PentaGauss
-    from darkmod.crystal import Crystal
-    from darkmod.crl import CompundRefractiveLens
-    from darkmod.laue import keV_to_angstrom
     from darkmod import laue
+    from darkmod.beam import GaussianLineBeam
+    from darkmod.crl import CompundRefractiveLens
+    from darkmod.crystal import Crystal
     from darkmod.deformation import linear_gradient
+    from darkmod.detector import Detector
+    from darkmod.laue import keV_to_angstrom
+    from darkmod.resolution import DualKentGauss, PentaGauss
 
     number_of_lenses = 50
     lens_space = 2000  # microns

@@ -182,6 +182,25 @@ _
         return detector_image
 
 
+    def noise(self, size, lam=2.276, mu=99.453, std=2.317):
+        """Thermal + Shot noise model for detector counting errors.
+
+        Args:
+            size (:obj:`tuple` of :obj:`int`): Shape of noise array.
+            lam (:obj:`float`): Poisson (shot noise) mean parameter.
+            mu (:obj:`float`): Mean thermal noise.
+            std (:obj:`float`): Standard devation of thermal noise.
+
+        Returns:
+            :obj:`numpy array`: Noise array of shape=size.
+        """
+        shot_noise = np.random.poisson(lam=lam, size=size)
+        thermal_noise = np.random.normal(loc=mu, scale=std, size=size)
+        return thermal_noise + shot_noise
+
+
+
+
 def _get_det_corners_wall_mount(
     crl,
     pixel_size,
