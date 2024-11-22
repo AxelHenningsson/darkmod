@@ -2,8 +2,12 @@ import cProfile
 import pstats
 import time
 
+import darling
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.ndimage import binary_dilation, binary_fill_holes, find_objects, label
+from darkmod import scan
+from scipy.interpolate import RegularGridInterpolator
 
 from darkmod import laue
 from darkmod.beam import GaussianLineBeam
@@ -13,6 +17,15 @@ from darkmod.deformation import linear_gradient, rotation_gradient, unity_field
 from darkmod.detector import Detector
 from darkmod.laue import keV_to_angstrom
 from darkmod.resolution import DualKentGauss, PentaGauss, TruncatedPentaGauss
+
+plt.style.use("dark_background")
+fontsize = 16  # General font size for all text
+ticksize = 16  # tick size
+plt.rcParams["font.size"] = fontsize
+plt.rcParams["xtick.labelsize"] = ticksize
+plt.rcParams["ytick.labelsize"] = ticksize
+
+from darkmod.utils import crop
 
 if __name__ == "__main__":
 
@@ -51,19 +64,31 @@ if __name__ == "__main__":
     dx = xg[1] - xg[0]
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
 
-    #defgrad = unity_field(X.shape)
-    # defgrad = linear_gradient(
+    mm = (1 - X*X - Y*X)*0.05 * 1e-3
+    rotation_axis = np.array([1., -1., 1.])
+    rotation_axis /= np.linalg.norm(rotation_axis)
+    r = np.repeat(rotation_axis.reshape(1, 3), mm.size, axis=0) * mm.flatten()[:,np.newaxis]
+    from scipy.spatial.transform import Rotation
+    defgrad = Rotation.from_rotvec(r).as_matrix().reshape(*mm.shape, 3, 3)
+
+    # defgrad = rotation_gradient(
     #     X.shape,
-    #     component=(2, 2),
+    #     rotation_axis=np.array([1, -1, 1]),
     #     axis=1,
-    #     magnitude=0.0002,
+    #     magnitude=0.05 * 1e-3,
     # )
-    defgrad = rotation_gradient(
-    X.shape,
-    rotation_axis=np.array([0, 1, 0]),
-    axis=1,
-    magnitude=1e-4,
-    )
+
+    #defgrad = unity_field(X.shape)
+
+    spatial_artefact = True
+    detector_noise = True
+    chimax = 2.5
+    phimax = 0.12
+    nphi = 31
+    nchi = 11
+
+    # defgrad = unity_field(X.shape)
+
     crystal.discretize(X, Y, Z, defgrad)
     crystal.write("strain_gradient")
 
@@ -88,7 +113,6 @@ if __name__ == "__main__":
     dh = (crl.length * np.sin(angular_tilt)) * 1e-6
     FWHM_CRL_horizontal = FWHM_CRL_vertical - 2 * dh
 
-    # # TODO: truncation wont help
     resolution_function = PentaGauss(
         crl.optical_axis,
         1e-9 / (2 * np.sqrt(2 * np.log(2))),
@@ -104,79 +128,35 @@ if __name__ == "__main__":
     # Detector size
     det_row_count = 256
     det_col_count = 256
-    pixel_size = (
-        crl.magnification * dx * 0.17
-    )  # this will split the phi chi over seevral pixels....
+    pixel_size = crl.magnification * dx * 0.17
 
     print("pixel_size", pixel_size)
 
-    detector = Detector.wall_mount(
+    detector = Detector.orthogonal_mount(
         crl, pixel_size, det_row_count, det_col_count, super_sampling=1
     )
 
     beam = GaussianLineBeam(z_std=0.1, energy=energy)
 
-    npoints = 11
-    phi_values = np.linspace(-0.05, 0.05, npoints) * 1e-3
-    print(phi_values[1] - phi_values[0])
-    chi_values = np.linspace(-2, 2, npoints) * 1e-3
+    chimin = -np.abs(chimax)
+    phimin = -np.abs(phimax)
+    phi_values = np.linspace(phimin, phimax, nphi) * 1e-3
+    chi_values = np.linspace(chimin, chimax, nchi) * 1e-3
+    print(phi_values)
+    print(chi_values)
 
-    PHI,CHI = np.meshgrid(phi_values, chi_values, indexing='ij')
+    for angarr in (phi_values, chi_values):
+        assert np.abs(np.median(angarr)) < 1e-8
 
-    def mosa_scan(
-        hkl,
-        phi_values,
-        chi_values,
-        crystal,
-        crl,
-        detector,
-        beam,
-        resolution_function,
-        signal_to_noise=100,
-    ):
-        """Simulate a mosaicity scan in phi and chi."""
+    dphi = phi_values[1] - phi_values[0]
+    dchi = chi_values[1] - chi_values[0]
 
-        phi0 = crystal.goniometer.phi
-        chi0 = crystal.goniometer.chi
-
-        mosa = np.zeros(
-            (
-                detector.det_row_count,
-                detector.det_col_count,
-                len(phi_values),
-                len(chi_values),
-            )
-        )
-
-        for i in range(len(phi_values)):
-            for j in range(len(chi_values)):
-
-                crystal.goniometer.phi = phi_values[i]
-                crystal.goniometer.chi = chi_values[j]
-
-                mosa[:, :, i, j] = crystal.diffract(
-                    hkl,
-                    resolution_function,
-                    crl,
-                    detector,
-                    beam,
-                )
-
-        crystal.goniometer.phi = phi0
-        crystal.goniometer.chi = chi0
-
-        noise_level = np.max(mosa) / signal_to_noise
-        mosa += np.abs(np.random.normal(0, noise_level, size=mosa.shape))
-        mosa /= np.max(mosa)
-        mosa *= 64000
-        mosa = mosa.round().astype(np.uint16)
-
-        return mosa
+    PHI, CHI = np.meshgrid(phi_values, chi_values, indexing="ij")
 
     pr = cProfile.Profile()
     pr.enable()
     t1 = time.perf_counter()
-    mosa = mosa_scan(
+    mosa = scan.phi_chi(
         hkl,
         phi_values,
         chi_values,
@@ -185,6 +165,9 @@ if __name__ == "__main__":
         detector,
         beam,
         resolution_function,
+        spatial_artefact,
+        detector_noise,
+        scan_mask=None,
     )
     t2 = time.perf_counter()
     pr.disable()
@@ -193,146 +176,117 @@ if __name__ == "__main__":
     ps.print_stats(15)
     print("\n\nCPU time is : ", t2 - t1, "s")
 
+    print("Subtracting background...")
+    background = np.median(mosa[:, 0:5, :, :]).astype(np.uint16)
+    print("background", background)
+    mosa.clip(background, out=mosa)
+    mosa -= background
+
+    mask = np.sum(mosa, axis=(-1, -2))
+    fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+    im = ax.imshow(mask)
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    plt.tight_layout()
+
+    mask = mask > np.max(mask) * 0.15
+    fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+    im = ax.imshow(mask)
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    plt.tight_layout()
+
+
+    mu, cov = darling.properties.moments(mosa, coordinates=(phi_values, chi_values))
+
+    fig, ax = plt.subplots(1, 2, figsize=(16, 6))
+    for i in range(2):
+        if i == 0:
+            im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.0006, vmax=0.0006)
+        if i == 1:
+            im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.007, vmax=0.007)
+
+        cbar = fig.colorbar(im, ax=ax[i], fraction=0.046, pad=0.04)
+        ax[i].set_title(r"Mean " + [r"$\phi$", r"$\chi$"][i] + " [mrad]", fontsize=16)
+        ax[i].set_xlabel("y [pixels]", fontsize=16)
+        if i == 0:
+            ax[i].set_ylabel("z [pixels]", fontsize=16)
+        ax[i].tick_params(axis="both", which="major", labelsize=16)
+        cbar.ax.tick_params(labelsize=16)
+    plt.tight_layout()
+
     if 1:
-
-        import darling
-        from scipy.ndimage import (binary_dilation, binary_fill_holes,
-                                   find_objects, label)
-
-        plt.style.use('dark_background')
-        fig, ax = plt.subplots(1, 1, figsize=(16, 16))
-        im = ax.imshow(mosa[:,:, 9, 3], cmap='magma')
-        cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        ax.set_xlabel("y [pixels]", fontsize=32)
-        ax.set_ylabel("z [pixels]", fontsize=32)
-        ax.tick_params(axis="both", which="major", labelsize=26)
-        phistr = str(np.round(phi_values[9]*1e3,2))
-        plt.tight_layout()
-
-        mask = mosa.sum(axis=(2, 3))
-        mask = mask > np.max(mask) * 0.1
-        labeled_array, num_features = label(mask)
-        region_slices = find_objects(labeled_array)
-        region_sizes = [
-            np.sum(labeled_array[sl] == (i + 1)) for i, sl in enumerate(region_slices)
-        ]
-        largest_region_index = np.argmax(region_sizes) + 1
-        largest_region_mask = labeled_array == largest_region_index
-        mask = largest_region_mask
-        mask = binary_fill_holes(mask)
-        mask = binary_dilation(mask, iterations=2)
-
-        def crop(array, mask):
-            non_zero_indices = np.argwhere(mask)
-            top_left = non_zero_indices.min(axis=0)
-            bottom_right = non_zero_indices.max(axis=0) + 1
-            return array[top_left[0] : bottom_right[0], top_left[1] : bottom_right[1]]
-
-        plt.style.use("dark_background")
-        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
-        im = ax.imshow(mask)
-        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        plt.tight_layout()
-
-        mu, cov = darling.properties.moments(mosa, coordinates=(phi_values, chi_values))
-
-        plt.style.use("dark_background")
-        fig, ax = plt.subplots(1, 2, figsize=(22, 14))
-        for i in range(2):
-            if i==0:
-                im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.05, vmax=0.05)
-            if i==1:
-                im = ax[i].imshow(mu[:, :, i] * 1e3, cmap="jet", vmin=-0.07, vmax=0.07)
-
-            cbar = fig.colorbar(im, ax=ax[i], fraction=0.046, pad=0.04)
-            ax[i].set_title(
-                r"Mean " + [r"$\phi$", r"$\chi$"][i] + " [mrad]", fontsize=32
-            )
-            ax[i].set_xlabel("y [pixels]", fontsize=32)
-            if i == 0:
-                ax[i].set_ylabel("z [pixels]", fontsize=32)
-            ax[i].tick_params(
-                axis="both", which="major", labelsize=26
-            )
-            cbar.ax.tick_params(labelsize=32)
-        plt.tight_layout()
-
         # We expect to be able to approximate the mean Q vector along the ray paths.
-        Q_lab_vol = crystal.get_Q_lab(hkl)
+        def expected_Q(crystal, beam, detector):
+            Q_sample_vol = crystal.get_Q_sample(hkl)
+            x_lab = crystal.goniometer.R @ crystal._x
+            sample_beam_density = beam(x_lab).reshape(crystal._grid_scalar_shape)
+            Qlw = Q_sample_vol * sample_beam_density[..., np.newaxis]
+            Q_true = np.zeros((mu.shape[0], mu.shape[1], 3))
+            for i in range(3):
+                Q_true[:, :, i] = detector.render(
+                    Qlw[:, :, :, i], crystal.voxel_size, crl, crystal.goniometer.R
+                )
 
-        Qx = detector.render(Q_lab_vol[:,:,:,0], crystal.voxel_size, crl, crystal.goniometer.R)
-        Qy = detector.render(Q_lab_vol[:,:,:,1], crystal.voxel_size, crl, crystal.goniometer.R)
-        Qz = detector.render(Q_lab_vol[:,:,:,2], crystal.voxel_size, crl, crystal.goniometer.R)
+            w = detector.render(
+                sample_beam_density, crystal.voxel_size, crl, crystal.goniometer.R
+            )
+            return Q_true / w[:, :, np.newaxis]
 
-        sample_density = np.ones((Q_lab_vol.shape[0], Q_lab_vol.shape[1], Q_lab_vol.shape[2])) # TODO: should be beam density?
-        sample = detector.render(sample_density, crystal.voxel_size, crl, crystal.goniometer.R)
-        Q_true = np.stack((Qx, Qy, Qz), axis=-1) / sample[:, :, np.newaxis]
-        Q_true /= np.linalg.norm(Q_true, axis=-1)[:, :, np.newaxis]
+        Q_true = expected_Q(crystal, beam, detector)
 
-        # The reconstructed Q directions are found as
-        # Qrec_lab = R @ Q0_sample
-        # i.e given that Q0_sample gives diffraction we must have that
-        # Qrec_lab is at R @ Q0_sample
-        phi0 = crystal.goniometer.phi
-        chi0 = crystal.goniometer.chi
+        mask = np.sum(mosa, axis=(-1, -2))
+        mask = mask > np.max(mask) * 0.15
 
+        # sample space recon
+        # R @ Q_sample = Q_lab_0 => Q_sample = R_ij.T @ Q_lab_0
         Q_rec = np.zeros((mu.shape[0], mu.shape[1], 3))
         Q_sample_0 = crystal.UB_0 @ hkl
-        Q_sample_0 = Q_sample_0 / np.linalg.norm(Q_sample_0)
         for i in range(mu.shape[0]):
             for j in range(mu.shape[1]):
-                crystal.goniometer.phi = mu[i, j, 0]
-                crystal.goniometer.chi = mu[i, j, 1]
-                Q_rec[i, j] = crystal.goniometer.R @ Q_sample_0
+                R_s = crystal.goniometer.get_R_top(mu[i, j, 0], mu[i, j, 1])
+                Q_rec[i, j] = R_s.T @ Q_sample_0
 
-        crystal.goniometer.phi = phi0
-        crystal.goniometer.chi = chi0
+        Q_true[~mask, :] = np.nan
+        Q_rec[~mask, :] = np.nan
 
-        plt.style.use("dark_background")
-        q_lab = Q_lab / np.linalg.norm(Q_lab)
-        fig, ax = plt.subplots(2, 3, figsize=(28, 16))
-        fig.suptitle(r'True and reconstructed $\Delta$ Q/||Q|| vectors (in lab) [1e-5]', fontsize=32)
+        fig, ax = plt.subplots(2, 3, figsize=(14, 9))
+        fig.suptitle(
+            r"True and reconstructed Q vectors (in lab)",
+            fontsize=16,
+        )
         for j in range(2):
-            Qs = [Q_true*1e5 - q_lab*1e5, Q_rec*1e5 - q_lab*1e5]
+            Qs = [Q_true, Q_rec]
             _Q = Qs[j]
             title = [r"True ", r"Estimated "][j]
             for i in range(3):
-                vmin = -4.9
-                vmax = 4.9
-                if i==2:
-                    vmin = -1
-                    vmax = 1 
-                im = ax[j, i].imshow(_Q[:, :, i], vmin=vmin, vmax=vmax)
+                vmin = np.nanmin( crop(Qs[1][:,:,i], mask) )
+                vmax = np.nanmax( crop(Qs[1][:,:,i], mask) )
+                im = ax[j, i].imshow(crop(_Q[:, :, i], mask), vmin=vmin, vmax=vmax)
                 cbar = fig.colorbar(im, ax=ax[j, i], fraction=0.046, pad=0.04)
                 ax[j, i].set_title(
-                    title + [r"$\Delta$ q$_x$", r"$\Delta$ q$_y$", r"$\Delta$ q$_z$"][i], fontsize=32
+                    title + [r"Q$_x$", r"Q$_y$", r"Q$_z$"][i],
+                    fontsize=16,
                 )
-                if j==1: ax[j, i].set_xlabel("y [pixels]", fontsize=32)
-                ax[j, i].set_ylabel("z [pixels]", fontsize=32)
-                ax[j, i].tick_params(axis="both", which="major", labelsize=26)
-                cbar.ax.tick_params(labelsize=32)
+                if j == 1:
+                    ax[j, i].set_xlabel("y [pixels]", fontsize=16)
+                if i == 0:
+                    ax[j, i].set_ylabel("z [pixels]", fontsize=16)
+                ax[j, i].tick_params(axis="both", which="major", labelsize=16)
+                cbar.ax.tick_params(labelsize=16)
         plt.tight_layout()
 
-    fig, ax = plt.subplots(1, 1, figsize=(16, 14))
-    im = ax.pcolormesh(PHI*1e3, CHI*1e3, mosa[mosa.shape[0]//2, mosa.shape[1]//2, :, :], cmap='magma')
-    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.ax.tick_params(labelsize=32)
-    ax.tick_params(axis="both", which="major", labelsize=26)
-    ax.set_xlabel("$\phi$ [mrad]", fontsize=32)
-    ax.set_ylabel("$\chi$ [mrad]", fontsize=32)
-    ax.set_title("$\phi$-$\chi$ distirbution in central pixel [counts]", fontsize=32)
-    plt.tight_layout()
-
-
-
-    fig, ax = plt.subplots(1, 1, figsize=(16, 14))
-    im = ax.pcolormesh(PHI*1e3, CHI*1e3, mosa[mosa.shape[0]//2, 1, :, :], cmap='magma')
-    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.ax.tick_params(labelsize=32)
-    ax.tick_params(axis="both", which="major", labelsize=26)
-    ax.set_xlabel("$\phi$ [mrad]", fontsize=32)
-    ax.set_ylabel("$\chi$ [mrad]", fontsize=32)
-    ax.set_title("$\phi$-$\chi$ distirbution in central pixel [counts]", fontsize=32)
-    plt.tight_layout()
-    plt.show()
-
+        phi_mesh, chi_mesh = np.meshgrid(phi_values, chi_values, indexing="ij")
+        support = np.sum(mosa, axis=(0, 1))
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+        ax.set_title('Scan Sparsity Pattern')
+        im = ax.pcolormesh(
+            chi_mesh * 1e3,
+            phi_mesh * 1e3,
+            np.log(support.clip(1)),
+            cmap="plasma",
+            edgecolors="black",
+        )
+        ax.set_xlabel("$\chi$ [mrad]")
+        ax.set_ylabel("$\phi$ [mrad]")
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+        plt.show()

@@ -48,11 +48,11 @@ class Detector(object):
     def remount_to_crl(self, crl):
         """Set the detector gometry to match the center with the optical CRL axis.
 
-        NOTE: This is only well deifned for wall mount and orthogonal mount geometries.
+                NOTE: This is only well deifned for wall mount and orthogonal mount geometries.
 
-        Args:
-            crl (obj:`darkmod.crl.CompoundRefractiveLens`): The crl.
-_
+                Args:
+                    crl (obj:`darkmod.crl.CompoundRefractiveLens`): The crl.
+        _
         """
         if self._wall_mount:
             self.detector_corners = _get_det_corners_wall_mount(
@@ -155,7 +155,7 @@ _
 
         # The backrotation of the detector by the goniometer setting simulates the
         # fact that the sample and lab coordinate systems are not aligned. I.e the
-        # sample voxel_volume is tilted. We bring the geomtry to the sample frame.
+        # sample voxel_volume is tilted. We bring the geometry to the sample frame.
         # This is a compatability requirement for the projector, which does not
         # support rotated volumes. Also, this is faster than rotating all the voxels
         # in the volume, here we require to only rotate the optical axis and the
@@ -181,6 +181,31 @@ _
 
         return detector_image
 
+    def backproject(
+        self,
+        detector_image,
+        voxel_volume_shape,
+        voxel_size,
+        crl,
+        sample_rotation=np.eye(3),
+    ):
+        """Backpropagate the pixel values of a detector image to the sample volume.
+
+        This is similar to a tomographic backprojection operation.
+    
+        Args:
+            detector_image (:obj:`np.ndarray`): The 2d image to be backprojected.
+            voxel_volume_shape (:obj:`tuple` of :obj:`int`): The sample voxel volume shape.
+            voxel_size (:obj:`float`): voxel size in microns.
+            crl (obj:`darkmod.crl.CompoundRefractiveLens`): The crl.
+            sample_rotation (:obj:`np.ndarray`): The rotation matrix that brings sample vectors
+                to lab frame. I.e the goniometer setting. Defaults to np.eye(3) in which case
+                sample and lab frames are considered to be aligned. shape=(3,3).
+
+        Returns:
+            :obj:`np.ndarray`: The voxel volume populated by the backprojected values of detector_image.
+        """
+        raise NotImplementedError('backproject() has not yet been implemented.')
 
     def noise(self, size, lam=2.276, mu=99.453, std=2.317):
         """Thermal + Shot noise model for detector counting errors.
@@ -197,8 +222,6 @@ _
         shot_noise = np.random.poisson(lam=lam, size=size)
         thermal_noise = np.random.normal(loc=mu, scale=std, size=size)
         return thermal_noise + shot_noise
-
-
 
 
 def _get_det_corners_wall_mount(
@@ -222,21 +245,13 @@ def _get_det_corners_orthogonal_mount(
     det_row_count,
     det_col_count,
 ):
-    y = np.array([0, 1, 0])
-    z = np.array([0, 0, 1])
-    theta = np.sign(crl.optical_axis[2]) * np.arccos(crl.optical_axis[0]) / 2.0
-    s, c = np.sin(2 * theta), np.cos(2 * theta)
-    Ry = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
-    zim = Ry.T @ z
-
+    xi, yi, zi = crl.imaging_system.T
     dr = pixel_size * det_row_count / 2.0
     dc = pixel_size * det_col_count / 2.0
-    d0 = crl.optical_axis * crl.L - y * dc - zim * dr
-    d1 = d0 + y * det_col_count * pixel_size
-    d2 = d0 + zim * det_row_count * pixel_size
-
+    d0 = xi * crl.L - yi * dc - zi * dr
+    d1 = d0 + yi * det_col_count * pixel_size
+    d2 = d0 + zi * det_row_count * pixel_size
     detector_corners = np.array([d0, d1, d2]).T
-
     return detector_corners
 
 

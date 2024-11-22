@@ -22,6 +22,7 @@ def phi_chi(
     resolution_function,
     spatial_artefact=True,
     detector_noise=True,
+    scan_mask=None,
 ):
     """
     Simulate a mosaicity scan over phi and chi angles.
@@ -43,6 +44,9 @@ def phi_chi(
         resolution_function (:obj:`darkmod.resolution`): Function defining the resolution function in Q-space.
         spatial_artefact (:obj:`bool`): Simulate spatial artifacts due to optical axis ofset. Defaults to True.
         detector_noise (:obj:`bool`): If True, adds noise to the simulated detector data. Defaults to True.
+        scan_mask (:obj:`numpy array`): A 2D boolean shape = (len(phi_values), len(chi_values)) mask. Only where
+            the scan_mask is true will an image be taken. Speeds up simulation for sparse scans. Defaults to None,
+            in which case all values on a grid defined by phi_values and chi_values are scanned.
 
     Returns:
         mosa (:obj:`numpy array`): A 4D array representing the diffraction signal over the scanned phi and chi values.
@@ -67,26 +71,28 @@ def phi_chi(
     for i in range(len(phi_values)):
         for j in range(len(chi_values)):
 
-            # Update goniometer angles to the current phi and chi values
-            _set_dfxm_setup(
-                crystal.goniometer,
-                crl,
-                detector,
-                resolution_function,
-                th0,
-                phi_values[i],
-                chi_values[j],
-            )
+            if scan_mask is None or scan_mask[i, j]:
 
-            # Simulate the diffraction pattern for the current angles
-            image_stack[..., i, j] = crystal.diffract(
-                hkl,
-                resolution_function,
-                crl,
-                detector,
-                beam,
-                spatial_artefact=spatial_artefact,
-            )
+                # Update goniometer angles to the current phi and chi values
+                _set_dfxm_setup(
+                    crystal.goniometer,
+                    crl,
+                    detector,
+                    resolution_function,
+                    th0,
+                    phi_values[i],
+                    chi_values[j],
+                )
+
+                # Simulate the diffraction pattern for the current angles
+                image_stack[..., i, j] = crystal.diffract(
+                    hkl,
+                    resolution_function,
+                    crl,
+                    detector,
+                    beam,
+                    spatial_artefact=spatial_artefact,
+                )
 
     # Reset the CRL, resolution function, and goniometer to the original angles
     _set_dfxm_setup(
@@ -257,11 +263,13 @@ def _normalize_image_stack(image_stack, detector_noise, detector):
         # Add simulated detector noise if specified
         noise = detector.noise(image_stack.shape)
         max_noise = int(np.ceil(np.max(noise)))
-    else:
-        max_noise = 0
 
-    # Rescale such that np.max(image_stack)==64000
-    image_stack *= 64000 - max_noise
+        # Rescale such that np.max(image_stack)==64000
+        image_stack *= (64000 - max_noise)
+        image_stack += noise
+    else:
+        # Rescale such that np.max(image_stack)==64000
+        image_stack *= 64000
 
     # Round values and convert to 16-bit unsigned integers for the camera format
     image_stack = image_stack.round(out=image_stack).astype(np.uint16, copy=False)

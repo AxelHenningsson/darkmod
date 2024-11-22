@@ -82,6 +82,28 @@ class GpuProjector(object):
         projection_image = self._bin_projection(projection_image)
         return projection_image
 
+    def backproject(
+        self,
+        detector_image,
+        voxel_volume_shape,
+        voxel_size,
+        ray_direction,
+    ):
+        """Backpropagate the pixel values of a detector image to the sample volume.
+
+        This is similar to a tomographic backprojection operation.
+
+        Args:
+            detector_image (:obj:`np.ndarray`): The 2d image to be backprojected.
+            voxel_volume_shape (:obj:`tuple` of :obj:`int`): The sample voxel volume shape.
+            voxel_size (:obj:`float`): Side length of sample voxel in units of microns.
+            ray_direction (:obj:`numpy array`): The propagation direction of the rays. shape=(3,)
+
+        Returns:
+            :obj:`np.ndarray`: The voxel volume populated by the backprojected values of detector_image.
+        """
+        raise NotImplementedError("GpuProjector.backproject() has not yet been implemented.")
+
     def _bin_projection(self, projection_image):
         """bin the image if super sampling was selected."""
         if self.super_sampling > 1:
@@ -138,8 +160,9 @@ class GpuProjector(object):
         # vector from pixel (0,0) to (1,0) i.e detector rows
         v = -dz / (voxel_size * self.super_sampling)
 
-
-        return np.concatenate((ray_direction, normalized_detector_center, u, v)).reshape(1, 12)
+        return np.concatenate(
+            (ray_direction, normalized_detector_center, u, v)
+        ).reshape(1, 12)
 
 
 if __name__ == "__main__":
@@ -173,7 +196,6 @@ if __name__ == "__main__":
             data.shape[2] // 2 - pn + i : data.shape[2] // 2 + pn - i,
         ] = 7  # y
 
-
     data *= 1
 
     # Detector size
@@ -186,7 +208,7 @@ if __name__ == "__main__":
 
     ss = []
     for theta in np.linspace(-np.radians(45), np.radians(45), 48):
-        #theta = np.radians(45)
+        # theta = np.radians(45)
         s, c = np.sin(2 * theta), np.cos(2 * theta)
         Ry = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
         optical_axis = Ry.T @ np.array([1, 0, 0])
@@ -225,7 +247,7 @@ if __name__ == "__main__":
         # pr.enable()
         # t1 = time.perf_counter()
 
-        mag_vox_size=voxel_size*10
+        mag_vox_size = voxel_size * 10
         image = projector(data, mag_vox_size, ray_direction)
 
         # print(image.sum())
@@ -237,18 +259,17 @@ if __name__ == "__main__":
         # ps.print_stats(15)
         # print("\n\nCPU time is : ", t2 - t1, "s")
 
-        print('image', image.sum())
+        print("image", image.sum())
 
         ss.append(image.sum())
 
-
-    plt.figure(figsize=(8,6))
+    plt.figure(figsize=(8, 6))
     plt.plot(np.linspace(-np.radians(45), np.radians(45), 48), ss)
     plt.grid(True)
     plt.show()
 
-    plt.figure(figsize=(8,6))
-    plt.hist(np.array(ss)-np.mean(ss))
+    plt.figure(figsize=(8, 6))
+    plt.hist(np.array(ss) - np.mean(ss))
     plt.show()
 
     plt.style.use("dark_background")

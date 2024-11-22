@@ -565,6 +565,7 @@ class PentaGauss(object):
         """
         th0, e0 = self.theta_0, self.eta_0
         k = 2 * np.pi / self._mean_wavelength
+
         M = k * np.array(
             [
                 [np.cos(2 * th0) - 1, 0, 0, 0, -np.sin(2 * th0)],
