@@ -113,7 +113,7 @@ def phi_chi(
 
 def theta_phi_chi(
     hkl,
-    theta_values,
+    delta_theta_values,
     phi_values,
     chi_values,
     crystal,
@@ -139,7 +139,7 @@ def theta_phi_chi(
 
     Args:
         hkl (:obj:`numpy array`): Miller indices to specify the crystal plane being scanned.
-        theta_values (:obj:`numpy array`): Array of theta values (in radians) to scan using the CRL.
+        delta_theta_values (:obj:`numpy array`): Array of theta shift values (in radians) to scan using the CRL.
         phi_values (:obj:`numpy array`): Array of phi angles (in radians) to scan.
         chi_values (:obj:`numpy array`): Array of chi angles (in radians) to scan.
         crystal (:obj:`Crystal`): The crystal object to be scanned.
@@ -153,7 +153,7 @@ def theta_phi_chi(
     Returns:
         image_stack (:obj:`numpy array`): A 5D array representing the diffraction signal over the scanned
                                           theta, phi, and chi values. The shape is
-                                          (detector.det_row_count, detector.det_col_count, len(theta_values),
+                                          (detector.det_row_count, detector.det_col_count, len(delta_theta_values),
                                           len(phi_values), len(chi_values)). The data is scaled (np.uint16 range)
                                           and rounded to simulate actual detector response.
     """
@@ -166,14 +166,14 @@ def theta_phi_chi(
         (
             detector.det_row_count,  # Number of detector rows
             detector.det_col_count,  # Number of detector columns
-            len(theta_values),  # Number of theta angle steps
+            len(delta_theta_values),  # Number of theta angle steps
             len(phi_values),  # Number of phi angle steps
             len(chi_values),  # Number of chi angle steps
         )
     )
 
     # Iterate over all combinations of theta, phi, and chi angles
-    for i in range(len(theta_values)):
+    for i in range(len(delta_theta_values)):
         for j in range(len(phi_values)):
             for k in range(len(chi_values)):
 
@@ -183,7 +183,7 @@ def theta_phi_chi(
                     crl,
                     detector,
                     resolution_function,
-                    th0 + theta_values[i],
+                    th0 + delta_theta_values[i],
                     phi_values[j],
                     chi_values[k],
                 )

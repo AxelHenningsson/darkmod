@@ -13,7 +13,12 @@ from darkmod.beam import GaussianLineBeam
 from darkmod import scan
 from darkmod.crl import CompundRefractiveLens
 from darkmod.crystal import Crystal
-from darkmod.deformation import linear_gradient, rotation_gradient, unity_field, multi_gradient
+from darkmod.deformation import (
+    linear_gradient,
+    rotation_gradient,
+    unity_field,
+    multi_gradient,
+)
 from darkmod.detector import Detector
 from darkmod.laue import keV_to_angstrom
 from darkmod.resolution import DualKentGauss, PentaGauss, TruncatedPentaGauss
@@ -79,46 +84,62 @@ if __name__ == "__main__":
     dx = xg[1] - xg[0]
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
 
+    # OK !
     #defgrad = unity_field(X.shape)
+
+    # OK !
     # defgrad = linear_gradient(
-    #   X.shape,
-    #    component=(2, 2),
-    #    axis=2,
-    #    magnitude=0.001,
+    #     X.shape,
+    #     component=(2, 2),
+    #     axis=1,
+    #     magnitude=0.001,
     # )
 
+    #OK !
     # defgrad = rotation_gradient(
     # X.shape,
     # rotation_axis=np.array([0, 1, 0]),
     # axis=1,
-    # magnitude=1e-4,
+    # magnitude=0.1 * 1e-3,
     # )
 
+    #OK !
+    # defgrad = multi_gradient(
+    #     X.shape,
+    #     component=(2, 2),
+    #     rotation_axis=np.array([0, 1, 0]),
+    #     axis=1,
+    #     rot_magnitude = 0.1 * 1e-3,
+    #     strain_magnitude = 10 * 1e-4,
+    # )
+
+    #OK !
     defgrad = multi_gradient(
         X.shape,
         component=(2, 2),
-        rotation_axis=np.array([0, 1, 0]),
+        rotation_axis=np.array([1, 1, 1]),
         axis=1,
-        rot_magnitude=1e-8,
-        strain_magnitude=0.001,
+        rot_magnitude = 0.1 * 1e-3,
+        strain_magnitude = 10 * 1e-4,
     )
 
-    #defgrad = unity_field(X.shape)
-
-    spatial_artefact = False
+    spatial_artefact = True
     detector_noise = True
 
     thmax = 0.6
-    phimax = 0.8
+    phimax = 0.7
     chimax = 1.8
 
-    ntheta = 11
+    #ntheta = 21
+    #nphi = 21
+    #nchi = 21
+    ntheta = 7
     nphi = 31
-    nchi = 3
+    nchi = 31
 
-    theta_values = np.linspace(-np.abs(thmax), thmax, ntheta)*1e-3
-    phi_values = np.linspace(-np.abs(phimax), phimax, nphi)*1e-3
-    chi_values = np.linspace(-np.abs(chimax), chimax, nchi)*1e-3
+    theta_values = np.linspace(-np.abs(thmax), thmax, ntheta) * 1e-3
+    phi_values = np.linspace(-np.abs(phimax), phimax, nphi) * 1e-3
+    chi_values = np.linspace(-np.abs(chimax), chimax, nchi) * 1e-3
 
     for angarr in (theta_values, phi_values, chi_values):
         assert np.abs(np.median(angarr)) < 1e-8, angarr
@@ -169,23 +190,23 @@ if __name__ == "__main__":
 
     print("pixel_size", pixel_size)
 
-    detector = Detector.wall_mount(
-        crl, pixel_size, det_row_count, det_col_count, super_sampling=4
+    detector = Detector.orthogonal_mount(
+        crl, pixel_size, det_row_count, det_col_count, super_sampling=1
     )
 
     beam = GaussianLineBeam(z_std=0.1, energy=energy)
-    
 
+    dth = theta_values[1] - theta_values[0]
+    dphi = phi_values[1] - phi_values[0]
+    dchi = chi_values[1] - chi_values[0]
 
-    dth = theta_values[1]-theta_values[0]
-    dphi = phi_values[1]-phi_values[0]
-    dchi = chi_values[1]-chi_values[0]
-
-    print( 'Number of scan points is: ', (len( theta_values ) * len( phi_values ) * len( chi_values )) )
-    print('theta resolution is: ', dth*1e3, 'mrad')
-    print('phi resolution is: ', dphi*1e3, 'mrad')
-    print('chi resolution is: ', dchi*1e3, 'mrad')
-
+    print(
+        "Number of scan points is: ",
+        (len(theta_values) * len(phi_values) * len(chi_values)),
+    )
+    print("theta resolution is: ", dth * 1e3, "mrad")
+    print("phi resolution is: ", dphi * 1e3, "mrad")
+    print("chi resolution is: ", dchi * 1e3, "mrad")
 
     pr = cProfile.Profile()
     pr.enable()
@@ -210,9 +231,9 @@ if __name__ == "__main__":
     ps.print_stats(15)
     print("\n\nCPU time is : ", t2 - t1, "s")
 
-    print('Subtracting background...')
-    background = np.median(strain_mosa[:,0:5,:,:]).astype(np.uint16)
-    print( 'background', background)
+    print("Subtracting background...")
+    background = np.median(strain_mosa[:, 0:5, :, :]).astype(np.uint16)
+    print("background", background)
     strain_mosa.clip(background, out=strain_mosa)
     strain_mosa -= background
 
@@ -222,7 +243,7 @@ if __name__ == "__main__":
     # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     # plt.tight_layout()
 
-    mask = mask > np.max(mask)*0.05
+    mask = mask > np.max(mask) * 0.05
 
     mu, cov = darling.properties.moments(
         strain_mosa, coordinates=(theta_values, phi_values, chi_values)
@@ -231,7 +252,7 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(1, 3, figsize=(16, 6))
     _mu = crop(mu, mask)
     for i in range(3):
-        #im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet")
+        # im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet")
 
         if i == 0:
             im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.22, vmax=0.22)
@@ -240,7 +261,7 @@ if __name__ == "__main__":
         if i == 2:
             im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.45, vmax=0.45)
 
-        cbar = fig.colorbar(im, ax=ax[i], fraction=0.046 / 2., pad=0.04)
+        cbar = fig.colorbar(im, ax=ax[i], fraction=0.046 / 2.0, pad=0.04)
         ax[i].set_title(
             r"Mean " + [r"$\Delta \theta$", r"$\phi$", r"$\chi$"][i] + " [mrad]"
         )
@@ -257,15 +278,15 @@ if __name__ == "__main__":
         x_lab = crystal.goniometer.R @ crystal._x
         sample_beam_density = beam(x_lab).reshape(crystal._grid_scalar_shape)
         Qlw = Q_sample_vol * sample_beam_density[..., np.newaxis]
-        Q_true = np.zeros( (mu.shape[0], mu.shape[1], 3) )
+        Q_true = np.zeros((mu.shape[0], mu.shape[1], 3))
         for i in range(3):
             Q_true[:, :, i] = detector.render(
                 Qlw[:, :, :, i], crystal.voxel_size, crl, crystal.goniometer.R
             )
         w = detector.render(
-                sample_beam_density, crystal.voxel_size, crl, crystal.goniometer.R
-            )
-        return Q_true / w[:,:,np.newaxis]
+            sample_beam_density, crystal.voxel_size, crl, crystal.goniometer.R
+        )
+        return Q_true / w[:, :, np.newaxis]
 
     Q_true = expected_Q(crystal, beam, detector)
 
@@ -273,32 +294,56 @@ if __name__ == "__main__":
     # R @ Q_sample = Q_lab_0 => Q_sample = R_ij.T @ Q_lab_0
     Q_rec = np.zeros((mu.shape[0], mu.shape[1], 3))
     q_sample_0 = crystal.UB_0 @ hkl / np.linalg.norm(crystal.UB_0 @ hkl)
+
+    # Rom = crystal.goniometer.get_R_omega(crystal.goniometer.omega)
+    # k_sample_hat = Rom @ np.array([1, 0, 0])
+    # rotvec = np.cross(k_sample_hat, q_sample_0)
+    # rotvec /= np.linalg.norm(rotvec)
+    M = resolution_function._get_M()
+
+
+    # sample space recon
+    # R @ Q_sample = Q_lab_0 => Q_sample = R_ij.T @ Q_lab_0
+    Q_rec = np.zeros((mu.shape[0], mu.shape[1], 3))
+    q_sample_0 = crystal.UB_0 @ hkl / np.linalg.norm(crystal.UB_0 @ hkl)
+    R_omega = crystal.goniometer.get_R_omega(crystal.goniometer.omega)
+    print(crystal.goniometer.info)
+    rotation_eta = Rotation.from_rotvec(np.array([1,0,0]) * (crl.eta))
+
     for i in range(mu.shape[0]):
         for j in range(mu.shape[1]):
             R_s = crystal.goniometer.get_R_top(mu[i, j, 1], mu[i, j, 2])
-            d_rec = lambda_0 / (2*np.sin(crl.theta + mu[i, j, 0]))
-            Q_norm = 2*np.pi / d_rec
+            d_rec = lambda_0 / (2 * np.sin(crl.theta + mu[i, j, 0]))
+            Q_norm = 2 * np.pi / d_rec
 
             # TODO:
-            # M = resolution_function._get_M()
-            # shift = M[:,4] * (2 * mu[i, j, 0])  #... Q_mean = Q_0 +  M @ dx....
-            # q_sample_0 = (crystal.UB_0 @ hkl + shift) / np.linalg.norm(crystal.UB_0 @ hkl + shift)
-            # somethign needs to be fixed here , see gradient in Q_y
-            # the rotation is not around y anymore but around the cross product
-            # between optical axis and Q_0. Could possibly be done with help of resfunc shift.
-            raise ValueError('Fix this !')
+            # approximate:
+            #_x = np.array([1, 0, 0, 0, 2 * mu[i, j, 0]])
+            #Q_sample_0 = R_omega.T @ (M @ _x)
 
-            s,c = np.sin(mu[i, j, 0]), np.cos(mu[i, j, 0])
-            Ry_dth = np.array([[c,0,s],[0,1,0],[-s,0,c]])
-            Q_rec[i, j] = R_s.T @ (Ry_dth.T @ q_sample_0 * Q_norm )
+            # exact:
+            rotation_th = Rotation.from_rotvec(np.array([0,1,0]) * (-2 * (crl.theta+mu[i, j, 0])))
+            rot = (rotation_eta * rotation_th).as_matrix()
+            _Q = rot @ np.array([1, 0, 0]) - np.array([1,0,0])
+            _Q = _Q / np.linalg.norm(_Q)
+            Q_sample_0 = R_omega.T @ _Q * Q_norm
+            
+            #print(np.abs(Q_sample_0 - crystal.UB_0 @ hkl))
+
+            # angle = mu[i, j, 0]
+            # Ry_dth = Rotation.from_rotvec(rotvec * angle).as_matrix()
+            # s,c = np.sin(mu[i, j, 0]), np.cos(mu[i, j, 0])
+            # Ry_dth = np.array([[c,0,s],[0,1,0],[-s,0,c]])
+            #Q_rec[i, j] = R_s.T @ (Ry_dth @.T q_sample_0 * Q_norm)
+            Q_rec[i, j] = R_s.T @ Q_sample_0
 
     # Q_true[~mask,:]= np.nan
     # Q_rec[~mask,:]= np.nan
 
-    d_field_rec = (2*np.pi) / np.linalg.norm(Q_rec, axis=-1)
-    d_field_true = (2*np.pi) / np.linalg.norm(Q_true, axis=-1)
+    d_field_rec = (2 * np.pi) / np.linalg.norm(Q_rec, axis=-1)
+    d_field_true = (2 * np.pi) / np.linalg.norm(Q_true, axis=-1)
     hkl_strain_rec = (d_field_rec - d_0) / d_0
-    hkl_strain_true =  (d_field_true - d_0) / d_0
+    hkl_strain_true = (d_field_true - d_0) / d_0
 
     fig, ax = plt.subplots(2, 3, figsize=(16, 12))
     fig.suptitle(
@@ -310,13 +355,12 @@ if __name__ == "__main__":
         _Q[np.abs(_Q) < 1e-12] = 0
         title = [r"True ", r"Estimated "][j]
         for i in range(3):
-            vmin = np.nanmin( crop(Qs[1][:,:,i], mask) )
-            vmax = np.nanmax( crop(Qs[1][:,:,i], mask) )
+            vmin = np.nanmin(crop(Qs[1][:, :, i], mask))
+            vmax = np.nanmax(crop(Qs[1][:, :, i], mask))
             im = ax[j, i].imshow(crop(_Q[:, :, i], mask), vmin=vmin, vmax=vmax)
-            cbar = fig.colorbar(im, ax=ax[j, i], fraction=0.046/2., pad=0.04)
+            cbar = fig.colorbar(im, ax=ax[j, i], fraction=0.046 / 2.0, pad=0.04)
             ax[j, i].set_title(
-                title
-                + [r"$Q_x$", r"$Q_y$", r"$Q_z$"][i],
+                title + [r"$Q_x$", r"$Q_y$", r"$Q_z$"][i],
             )
             if j == 1:
                 ax[j, i].set_xlabel("y [pixels]")
@@ -325,28 +369,28 @@ if __name__ == "__main__":
             cbar.ax.tick_params(labelsize=16)
     plt.tight_layout()
 
-
-    fig, ax = plt.subplots(1, 2, figsize=(14,7))
+    fig, ax = plt.subplots(1, 2, figsize=(14, 7))
     fig.suptitle(
         r"True and reconstructed strain in hkl direction: ($d_0$ - d) / $d_0$ )",
     )
     strains = [hkl_strain_true, hkl_strain_rec]
-    cmaps = ['RdBu_r','RdBu_r']
-    titles = ['True', 'Recon']
+    cmaps = ["RdBu_r", "RdBu_r"]
+    titles = ["True", "Recon"]
     for i in range(2):
-        im = ax[i].imshow(crop(strains[i], mask), cmap=cmaps[i], vmin=-0.0012, vmax=0.0012)
-        fig.colorbar(im, ax=ax[i], fraction=0.046/2., pad=0.04)
+        im = ax[i].imshow(
+            crop(strains[i], mask), cmap=cmaps[i], vmin=-0.0012, vmax=0.0012
+        )
+        fig.colorbar(im, ax=ax[i], fraction=0.046 / 2.0, pad=0.04)
         ax[i].set_title(titles[i])
     ax[0].set_xlabel("y [pixels]")
     ax[1].set_xlabel("y [pixels]")
     ax[0].set_ylabel("z [pixels]")
     plt.tight_layout()
 
-
     phi_mesh, chi_mesh = np.meshgrid(phi_values, chi_values, indexing="ij")
-    support = np.sum(strain_mosa, axis=(0, 1))[len(theta_values)//2, :, :]
+    support = np.sum(strain_mosa, axis=(0, 1))[len(theta_values) // 2, :, :]
     fig1, ax1 = plt.subplots(1, 1, figsize=(10, 8))
-    ax1.set_title("$\phi$-$\chi$ Scan Sparsity Pattern")
+    ax1.set_title("$\phi$-$\chi$  Log-Sparsity Scan Pattern")
     im = ax1.pcolormesh(
         chi_mesh * 1e3,
         phi_mesh * 1e3,
@@ -360,9 +404,9 @@ if __name__ == "__main__":
     plt.tight_layout()
 
     theta_mesh, chi_mesh = np.meshgrid(theta_values, chi_values, indexing="ij")
-    support = np.sum(strain_mosa, axis=(0, 1))[:, len(phi_values)//2, :]
+    support = np.sum(strain_mosa, axis=(0, 1))[:, len(phi_values) // 2, :]
     fig1, ax1 = plt.subplots(1, 1, figsize=(10, 8))
-    ax1.set_title("$\\theta$-$\chi$ Scan Sparsity Pattern")
+    ax1.set_title("$\\theta$-$\chi$ Log-Sparsity Scan Pattern")
     im = ax1.pcolormesh(
         chi_mesh * 1e3,
         theta_mesh * 1e3,
@@ -375,8 +419,4 @@ if __name__ == "__main__":
     fig1.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
     plt.tight_layout()
 
-
-
     plt.show()
-
-
