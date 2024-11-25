@@ -18,6 +18,7 @@ from darkmod.deformation import (
     rotation_gradient,
     unity_field,
     multi_gradient,
+    straight_edge_dislocation
 )
 from darkmod.detector import Detector
 from darkmod.laue import keV_to_angstrom
@@ -68,10 +69,34 @@ if __name__ == "__main__":
     # TODO add some funcitonaliyt to the crystal to figure this
     # out automagically
 
+    #
+    # Reflection set of rank : 3
+    # condition number       : 3.0
+    # Diffracting at eta     : 20.2326
+    # Symmetry axis          :  0, 0, 1
+    #                 h	  k	  l	omega_1	omega_2	eta_1	eta_2	theta	2 theta
+    # reflection 40	-1.0	-1.0	3.0	28.00	285.14	20.23	-20.23	15.42	30.83
+    # reflection 45	1.0	-1.0	3.0	298.00	195.14	20.23	-20.23	15.42	30.83
+    # reflection 46	-1.0	1.0	3.0	118.00	15.14	20.23	-20.23	15.42	30.83
+    # reflection 49	1.0	1.0	3.0	105.14	208.00	-20.23	20.23	15.42	30.83
+    #
+    #
+
     # NOTE: The hkl we are probing is NOT alignd with sample-z at this point.
     # this makes thinking about the projection of rotation gradients a bit harder.
+
+    # Reflection #1
     hkl = np.array([-1, -1, 3])
     crystal.goniometer.omega = np.radians(6.431585)
+
+    # Reflection #2
+    # hkl = np.array([1.0, -1.0,  3.0])
+    # crystal.goniometer.omega = np.radians(276.431585)
+
+    # Reflection #3
+    # hkl = np.array([-1.0 , 1.0,  3.0 ])
+    # crystal.goniometer.omega = np.radians(96.431585)
+
     eta = np.radians(20.232593)
     theta = np.radians(15.416837)
     # Bring the CRL to diffracted beam.
@@ -114,28 +139,31 @@ if __name__ == "__main__":
     # )
 
     #OK !
-    defgrad = multi_gradient(
-        X.shape,
-        component=(2, 2),
-        rotation_axis=np.array([1, 1, 1]),
-        axis=1,
-        rot_magnitude = 0.1 * 1e-3,
-        strain_magnitude = 10 * 1e-4,
-    )
+    # defgrad = multi_gradient(
+    #     X.shape,
+    #     component=(2, 2),
+    #     rotation_axis=np.array([1, 1, 1]),
+    #     axis=1,
+    #     rot_magnitude = 0.1 * 1e-3,
+    #     strain_magnitude = 10 * 1e-4,
+    # )
 
-    spatial_artefact = True
-    detector_noise = True
+
+    defgrad = straight_edge_dislocation((X, Y, Z), x0=[[0, 0, 0]])
+
+    spatial_artefact = False
+    detector_noise = False
 
     thmax = 0.6
-    phimax = 0.7
-    chimax = 1.8
+    phimax = 1.4
+    chimax = 2.4
 
-    #ntheta = 21
-    #nphi = 21
-    #nchi = 21
-    ntheta = 7
-    nphi = 31
-    nchi = 31
+    # ntheta = 21
+    # nphi = 21
+    # nchi = 21
+    ntheta = 11
+    nphi = 61
+    nchi = 21
 
     theta_values = np.linspace(-np.abs(thmax), thmax, ntheta) * 1e-3
     phi_values = np.linspace(-np.abs(phimax), phimax, nphi) * 1e-3
@@ -145,7 +173,7 @@ if __name__ == "__main__":
         assert np.abs(np.median(angarr)) < 1e-8, angarr
 
     crystal.discretize(X, Y, Z, defgrad)
-    crystal.write("strain_gradient")
+    crystal.write("straight_edge_dislocation")
 
     Q_lab = crystal.goniometer.R @ crystal.UB_0 @ hkl
     d_0 = (2 * np.pi) / np.linalg.norm(Q_lab)
@@ -255,11 +283,11 @@ if __name__ == "__main__":
         # im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet")
 
         if i == 0:
-            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.22, vmax=0.22)
+            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.006, vmax=0.006)
         if i == 1:
-            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.55, vmax=0.55)
+            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.22, vmax=0.22)
         if i == 2:
-            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.45, vmax=0.45)
+            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.22, vmax=0.22)
 
         cbar = fig.colorbar(im, ax=ax[i], fraction=0.046 / 2.0, pad=0.04)
         ax[i].set_title(
@@ -327,7 +355,7 @@ if __name__ == "__main__":
             _Q = rot @ np.array([1, 0, 0]) - np.array([1,0,0])
             _Q = _Q / np.linalg.norm(_Q)
             Q_sample_0 = R_omega.T @ _Q * Q_norm
-            
+
             #print(np.abs(Q_sample_0 - crystal.UB_0 @ hkl))
 
             # angle = mu[i, j, 0]
@@ -378,7 +406,7 @@ if __name__ == "__main__":
     titles = ["True", "Recon"]
     for i in range(2):
         im = ax[i].imshow(
-            crop(strains[i], mask), cmap=cmaps[i], vmin=-0.0012, vmax=0.0012
+            crop(strains[i], mask), cmap=cmaps[i], vmin=-3*1e-5, vmax=3*1e-5
         )
         fig.colorbar(im, ax=ax[i], fraction=0.046 / 2.0, pad=0.04)
         ax[i].set_title(titles[i])

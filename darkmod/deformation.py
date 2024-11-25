@@ -2,6 +2,59 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 
+def straight_edge_dislocation(coord, x0=[[0, 0, 0]], v=0.334, b=2.86 * 1e-4):
+    """Calculate the deformation gradient for an edge dislocation.
+
+    Computes the deformation field caused by edge dislocations
+    located at a series of points `x0` in the crystal.
+
+    Args:
+        X, Y (:obj:`np.ndarray`): 2D coordinate arrays for the crystal points.
+        x0 (:obj:`list` of lists): Dislocation positions in the crystal, default is [[0, 0, 0]].
+        v (:obj:`float`): Poisson's ratio, default is 0.3.
+        b (:obj:`float`): Burgers vector magnitude, default is 2.86e-4.
+
+    Returns:
+        :obj:`np.ndarray`: Deformation gradient tensor F, shape=(m, n, 3, 3).
+    """
+
+    # dislocation system basis matrix
+    U_d = np.array([[1, -1, 0], [1, 1, -1], [1, 1, 2]]).T
+    U_d = U_d / np.linalg.norm(U_d, axis=0)
+    print(np.linalg.norm(U_d, axis=0), U_d)
+
+    # dislocation system voxel cooridnates.
+    X, Y, Z = U_d.T @ np.array([c.flatten() for c in coord])
+
+    # The deformation gradient tensor in dislocation frame.
+    F_d = np.zeros((len(X), 3, 3))
+    for i in range(3):
+        F_d[:, i, i] = 1
+
+    for i in range(len(x0)):
+
+        # dislocation position in dislocation frame.
+        x, y, _ = U_d.T @ np.array(x0[i])
+
+        # compute local F value
+        Ys, Xs = (X - x), (Y - y)
+        x2, y2 = Ys * Ys, Xs * Xs
+        a_1 = b / (4 * np.pi * (1 - v))
+
+        a_2 = x2 + y2
+        a_3 = 1 / ((a_2 * a_2))
+        a_4 = -2 * v * a_2
+        F_d[:, 0, 0] += (-Ys * (3 * x2 + y2 + a_4)) * a_3 * a_1
+        F_d[:, 0, 1] += (Xs * (3 * x2 + y2 + a_4)) * a_3 * a_1
+        F_d[:, 1, 0] += (-Xs * (x2 + 3 * y2 + a_4)) * a_3 * a_1
+        F_d[:, 1, 1] += (Ys * (x2 - y2 + a_4)) * a_3 * a_1
+
+    # Map F back to sample frame.
+    F_g = (U_d @ F_d @ U_d.T).reshape((*coord[0].shape, 3, 3))
+
+    return F_g
+
+
 def edge_dislocation(X, Y, x0=[[0, 0]], v=0.3, b=2.86 * 1e-4):
     """Calculate the deformation gradient for an edge dislocation.
 
@@ -170,3 +223,53 @@ def simple_shear(shape, shear_magnitude=0.003):
     F = unity_field(shape)
     F[:, :, :, 0, 1] = shear_magnitude
     return F
+
+
+if __name__ == "__main__":
+
+    xg = np.linspace(-1, 1, 128)
+    coord = np.meshgrid(xg, xg, xg, indexing="ij")
+    defgrad = straight_edge_dislocation(coord, x0=[[0,0,0]])
+    beta = defgrad.copy()
+    for i in range(3):
+        beta[..., i, i] -= 1
+
+    import matplotlib.pyplot as plt
+
+    fontsize = 16  # General font size for all text
+    ticksize = 16  # tick size
+    plt.rcParams["font.size"] = fontsize
+    plt.rcParams["xtick.labelsize"] = ticksize
+    plt.rcParams["ytick.labelsize"] = ticksize
+
+    # from matplotlib.colors import LinearSegmentedColormap
+
+    # color_min    = "#4203ff"
+    # color_center = "black"
+    # color_max    = "#ff0342"
+    # cmap = LinearSegmentedColormap.from_list(
+    #     "cmap_name",
+    #     [color_min, color_center, color_max]
+    # )
+
+    plt.style.use("dark_background")
+    fig, ax = plt.subplots(3, 3, figsize=(15, 9), sharex=True, sharey=True)
+    fig.suptitle("Elastic distortion ($\\beta$) field around dislocations")
+    for i in range(3):
+        for j in range(3):
+            vmax = np.max(np.abs(beta[:, :, coord[0].shape[2] // 2, i, j]))*0.1
+            vmin = -vmax
+            im = ax[i, j].imshow(
+                beta[:, :, coord[0].shape[2] // 2, i, j],
+                vmin=vmin,
+                vmax=vmax,
+                cmap="coolwarm",
+            )
+            ax[i, j].annotate(r'$\boldsymbol{F}_{'+str(i+1)+str(j+1)+r'}$', (6,14), c='black')
+            fig.colorbar(im, ax=ax[i, j], fraction=0.046, pad=0.04)
+            if i == 2 :
+                ax[i, j].set_xlabel("y [voxels]")
+            if j == 0 :
+                ax[i, j].set_ylabel("x [voxels]")
+    plt.tight_layout()
+    plt.show()
