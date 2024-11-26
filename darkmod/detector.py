@@ -207,21 +207,21 @@ class Detector(object):
         """
         raise NotImplementedError('backproject() has not yet been implemented.')
 
-    def noise(self, size, lam=2.276, mu=99.453, std=2.317):
+    def noise(self, image_stack, mu=99.453, std=2.317):
         """Thermal + Shot noise model for detector counting errors.
 
         Args:
-            size (:obj:`tuple` of :obj:`int`): Shape of noise array.
-            lam (:obj:`float`): Poisson (shot noise) mean parameter.
+            size (:obj:`np.ndarray`): Stack of images.
             mu (:obj:`float`): Mean thermal noise.
             std (:obj:`float`): Standard devation of thermal noise.
 
         Returns:
             :obj:`numpy array`: Noise array of shape=size.
         """
-        shot_noise = np.random.poisson(lam=lam, size=size)
-        thermal_noise = np.random.normal(loc=mu, scale=std, size=size)
-        return thermal_noise + shot_noise
+        # TODO: this is booringly slow...
+        shot_noise = np.random.poisson(lam=image_stack)
+        thermal_noise = shot_noise + np.random.normal(loc=mu, scale=std, size=shot_noise.shape)
+        return thermal_noise
 
 
 def _get_det_corners_wall_mount(

@@ -8,17 +8,16 @@ import numpy as np
 from scipy.ndimage import binary_dilation, binary_fill_holes, find_objects, label
 from scipy.spatial.transform import Rotation
 
-from darkmod import laue
+from darkmod import laue, scan
 from darkmod.beam import GaussianLineBeam
-from darkmod import scan
 from darkmod.crl import CompundRefractiveLens
 from darkmod.crystal import Crystal
 from darkmod.deformation import (
     linear_gradient,
-    rotation_gradient,
-    unity_field,
     multi_gradient,
-    straight_edge_dislocation
+    rotation_gradient,
+    straight_edge_dislocation,
+    unity_field,
 )
 from darkmod.detector import Detector
 from darkmod.laue import keV_to_angstrom
@@ -85,17 +84,37 @@ if __name__ == "__main__":
     # NOTE: The hkl we are probing is NOT alignd with sample-z at this point.
     # this makes thinking about the projection of rotation gradients a bit harder.
 
-    # Reflection #1
-    hkl = np.array([-1, -1, 3])
-    crystal.goniometer.omega = np.radians(6.431585)
+    spatial_artefact = False
+    detector_noise = False
+    reflection = 1
 
-    # Reflection #2
-    # hkl = np.array([1.0, -1.0,  3.0])
-    # crystal.goniometer.omega = np.radians(276.431585)
-
-    # Reflection #3
-    # hkl = np.array([-1.0 , 1.0,  3.0 ])
-    # crystal.goniometer.omega = np.radians(96.431585)
+    if reflection == 1:  # Reflection #1
+        hkl = np.array([-1, -1, 3])
+        crystal.goniometer.omega = np.radians(6.431585)
+        thmax = 0.6
+        phimax = 1.4
+        chimax = 2.4
+        ntheta = 11
+        nphi = 61
+        nchi = 61
+    elif reflection == 2:  # Reflection #2
+        hkl = np.array([1.0, -1.0, 3.0])
+        crystal.goniometer.omega = np.radians(276.431585)
+        thmax = 0.6
+        phimax = 1.4
+        chimax = 2.4
+        ntheta = 11
+        nphi = 61
+        nchi = 21
+    elif reflection == 3:  # Reflection #3
+        hkl = np.array([-1.0, 1.0, 3.0])
+        crystal.goniometer.omega = np.radians(96.431585)
+        thmax = 0.6
+        phimax = 1.4
+        chimax = 2.4
+        ntheta = 11
+        nphi = 61
+        nchi = 21
 
     eta = np.radians(20.232593)
     theta = np.radians(15.416837)
@@ -103,14 +122,15 @@ if __name__ == "__main__":
     crl.goto(theta, eta)
 
     # Discretize the crystal
-    xg = np.linspace(-1, 1, 32)  # microns
-    yg = np.linspace(-1, 1, 32)  # microns
-    zg = np.linspace(-1, 1, 32)  # microns
+    xg = np.linspace(-1, 1, 33)  # microns
+    yg = np.linspace(-1, 1, 33)  # microns
+    zg = np.linspace(-1, 1, 33)  # microns
     dx = xg[1] - xg[0]
+    zg = zg[len(zg)//2  - 1: len(zg)//2 + 2]
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
 
     # OK !
-    #defgrad = unity_field(X.shape)
+    # defgrad = unity_field(X.shape)
 
     # OK !
     # defgrad = linear_gradient(
@@ -120,7 +140,7 @@ if __name__ == "__main__":
     #     magnitude=0.001,
     # )
 
-    #OK !
+    # OK !
     # defgrad = rotation_gradient(
     # X.shape,
     # rotation_axis=np.array([0, 1, 0]),
@@ -128,7 +148,7 @@ if __name__ == "__main__":
     # magnitude=0.1 * 1e-3,
     # )
 
-    #OK !
+    # OK !
     # defgrad = multi_gradient(
     #     X.shape,
     #     component=(2, 2),
@@ -138,7 +158,7 @@ if __name__ == "__main__":
     #     strain_magnitude = 10 * 1e-4,
     # )
 
-    #OK !
+    # OK !
     # defgrad = multi_gradient(
     #     X.shape,
     #     component=(2, 2),
@@ -147,23 +167,9 @@ if __name__ == "__main__":
     #     rot_magnitude = 0.1 * 1e-3,
     #     strain_magnitude = 10 * 1e-4,
     # )
-
-
+    
+    # TODO: fix singularity....
     defgrad = straight_edge_dislocation((X, Y, Z), x0=[[0, 0, 0]])
-
-    spatial_artefact = False
-    detector_noise = False
-
-    thmax = 0.6
-    phimax = 1.4
-    chimax = 2.4
-
-    # ntheta = 21
-    # nphi = 21
-    # nchi = 21
-    ntheta = 11
-    nphi = 61
-    nchi = 21
 
     theta_values = np.linspace(-np.abs(thmax), thmax, ntheta) * 1e-3
     phi_values = np.linspace(-np.abs(phimax), phimax, nphi) * 1e-3
@@ -259,6 +265,7 @@ if __name__ == "__main__":
     ps.print_stats(15)
     print("\n\nCPU time is : ", t2 - t1, "s")
 
+
     print("Subtracting background...")
     background = np.median(strain_mosa[:, 0:5, :, :]).astype(np.uint16)
     print("background", background)
@@ -270,6 +277,7 @@ if __name__ == "__main__":
     # im = ax.imshow(mask)
     # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     # plt.tight_layout()
+
 
     mask = mask > np.max(mask) * 0.05
 
@@ -329,14 +337,13 @@ if __name__ == "__main__":
     # rotvec /= np.linalg.norm(rotvec)
     M = resolution_function._get_M()
 
-
     # sample space recon
     # R @ Q_sample = Q_lab_0 => Q_sample = R_ij.T @ Q_lab_0
     Q_rec = np.zeros((mu.shape[0], mu.shape[1], 3))
     q_sample_0 = crystal.UB_0 @ hkl / np.linalg.norm(crystal.UB_0 @ hkl)
     R_omega = crystal.goniometer.get_R_omega(crystal.goniometer.omega)
     print(crystal.goniometer.info)
-    rotation_eta = Rotation.from_rotvec(np.array([1,0,0]) * (crl.eta))
+    rotation_eta = Rotation.from_rotvec(np.array([1, 0, 0]) * (crl.eta))
 
     for i in range(mu.shape[0]):
         for j in range(mu.shape[1]):
@@ -346,23 +353,25 @@ if __name__ == "__main__":
 
             # TODO:
             # approximate:
-            #_x = np.array([1, 0, 0, 0, 2 * mu[i, j, 0]])
-            #Q_sample_0 = R_omega.T @ (M @ _x)
+            # _x = np.array([1, 0, 0, 0, 2 * mu[i, j, 0]])
+            # Q_sample_0 = R_omega.T @ (M @ _x)
 
             # exact:
-            rotation_th = Rotation.from_rotvec(np.array([0,1,0]) * (-2 * (crl.theta+mu[i, j, 0])))
+            rotation_th = Rotation.from_rotvec(
+                np.array([0, 1, 0]) * (-2 * (crl.theta + mu[i, j, 0]))
+            )
             rot = (rotation_eta * rotation_th).as_matrix()
-            _Q = rot @ np.array([1, 0, 0]) - np.array([1,0,0])
+            _Q = rot @ np.array([1, 0, 0]) - np.array([1, 0, 0])
             _Q = _Q / np.linalg.norm(_Q)
             Q_sample_0 = R_omega.T @ _Q * Q_norm
 
-            #print(np.abs(Q_sample_0 - crystal.UB_0 @ hkl))
+            # print(np.abs(Q_sample_0 - crystal.UB_0 @ hkl))
 
             # angle = mu[i, j, 0]
             # Ry_dth = Rotation.from_rotvec(rotvec * angle).as_matrix()
             # s,c = np.sin(mu[i, j, 0]), np.cos(mu[i, j, 0])
             # Ry_dth = np.array([[c,0,s],[0,1,0],[-s,0,c]])
-            #Q_rec[i, j] = R_s.T @ (Ry_dth @.T q_sample_0 * Q_norm)
+            # Q_rec[i, j] = R_s.T @ (Ry_dth @.T q_sample_0 * Q_norm)
             Q_rec[i, j] = R_s.T @ Q_sample_0
 
     # Q_true[~mask,:]= np.nan
@@ -406,7 +415,7 @@ if __name__ == "__main__":
     titles = ["True", "Recon"]
     for i in range(2):
         im = ax[i].imshow(
-            crop(strains[i], mask), cmap=cmaps[i], vmin=-3*1e-5, vmax=3*1e-5
+            crop(strains[i], mask), cmap=cmaps[i], vmin=-3 * 1e-5, vmax=3 * 1e-5
         )
         fig.colorbar(im, ax=ax[i], fraction=0.046 / 2.0, pad=0.04)
         ax[i].set_title(titles[i])

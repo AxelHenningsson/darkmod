@@ -259,16 +259,13 @@ def _normalize_image_stack(image_stack, detector_noise, detector):
 
     # Normalize the diffraction pattern to use (approximately) the camera's full range (uint16)
     image_stack /= np.max(image_stack)
+    image_stack *= 64000
     if detector_noise:
         # Add simulated detector noise if specified
-        noise = detector.noise(image_stack.shape)
-        max_noise = int(np.ceil(np.max(noise)))
+        image_stack = detector.noise(image_stack)
 
         # Rescale such that np.max(image_stack)==64000
-        image_stack *= (64000 - max_noise)
-        image_stack += noise
-    else:
-        # Rescale such that np.max(image_stack)==64000
+        image_stack /= np.max(image_stack)
         image_stack *= 64000
 
     # Round values and convert to 16-bit unsigned integers for the camera format
