@@ -1,7 +1,9 @@
-import numpy as np
 import matplotlib.pyplot as plt
-from scipy.ndimage import gaussian_filter
+import numpy as np
 from scipy.interpolate import griddata
+from scipy.ndimage import gaussian_filter
+from scipy.spatial.transform import Rotation
+
 from darkmod.projector import GpuProjector
 
 
@@ -192,7 +194,7 @@ class Detector(object):
         """Backpropagate the pixel values of a detector image to the sample volume.
 
         This is similar to a tomographic backprojection operation.
-    
+
         Args:
             detector_image (:obj:`np.ndarray`): The 2d image to be backprojected.
             voxel_volume_shape (:obj:`tuple` of :obj:`int`): The sample voxel volume shape.
@@ -205,7 +207,7 @@ class Detector(object):
         Returns:
             :obj:`np.ndarray`: The voxel volume populated by the backprojected values of detector_image.
         """
-        raise NotImplementedError('backproject() has not yet been implemented.')
+        raise NotImplementedError("backproject() has not yet been implemented.")
 
     def noise(self, image_stack, mu=99.453, std=2.317):
         """Thermal + Shot noise model for detector counting errors.
@@ -220,7 +222,9 @@ class Detector(object):
         """
         # TODO: this is booringly slow...
         shot_noise = np.random.poisson(lam=image_stack)
-        thermal_noise = shot_noise + np.random.normal(loc=mu, scale=std, size=shot_noise.shape)
+        thermal_noise = shot_noise + np.random.normal(
+            loc=mu, scale=std, size=shot_noise.shape
+        )
         return thermal_noise
 
 
@@ -245,13 +249,45 @@ def _get_det_corners_orthogonal_mount(
     det_row_count,
     det_col_count,
 ):
-    xi, yi, zi = crl.imaging_system.T
+    # place detector in xy plane, we shall align such that the
+    # optical axis is orthogonal to the detector plane, and, at
+    # the same time, the projeciton of the lab-z-axis will be
+    # along the v = d2 - d0 directon of the detector, such that
+    # the rows on the detector alwys correspond to moving along
+    # the vertical (z) direction.
+    x, y, z = np.eye(3)
     dr = pixel_size * det_row_count / 2.0
     dc = pixel_size * det_col_count / 2.0
-    d0 = xi * crl.L - yi * dc - zi * dr
-    d1 = d0 + yi * det_col_count * pixel_size
-    d2 = d0 + zi * det_row_count * pixel_size
+    d0 = -y * dc - x * dr
+    d1 = d0 + y * det_col_count * pixel_size
+    d2 = d0 + z * det_row_count * pixel_size
     detector_corners = np.array([d0, d1, d2]).T
+
+    # rotation 1 around the lab z axis
+    oxy = crl.optical_axis[0:2] / np.linalg.norm(crl.optical_axis[0:2])
+    alpha = np.arccos(y[0:2] @ oxy)
+    beta = np.pi / 2.0 - alpha
+    R_beta = Rotation.from_rotvec(z * beta).as_matrix()
+    detector_corners = R_beta @ detector_corners
+
+    # rotation 2 around the lab z x optical_axis direction
+    gamma = np.arccos(crl.optical_axis @ z)
+    beta = np.pi / 2.0 - gamma
+    axis = np.cross(crl.optical_axis, z)
+    axis /= np.linalg.norm(axis)
+    R_beta = Rotation.from_rotvec(axis * beta).as_matrix()
+    detector_corners = R_beta @ detector_corners
+
+    # i.e, we have now fulfilled the following:
+    # d0, d1, d2 = detector_corners.T
+    # v = ((d2 - d0) / np.linalg.norm(d2 - d0))
+    # u = ((d1 - d0) / np.linalg.norm(d1 - d0))
+    # pz = z - crl.optical_axis * ( crl.optical_axis @ z )
+    # pz /= np.linalg.norm(pz)
+    # assert np.allclose(u @ crl.optical_axis, 0)
+    # assert np.allclose(v @ crl.optical_axis, 0)
+    # assert np.allclose( v @ pz, 1)
+
     return detector_corners
 
 

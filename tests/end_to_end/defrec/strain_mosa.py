@@ -1,6 +1,7 @@
 import cProfile
 import pstats
 import time
+import os
 
 import darling
 import matplotlib.pyplot as plt
@@ -9,7 +10,7 @@ from scipy.ndimage import binary_dilation, binary_fill_holes, find_objects, labe
 from scipy.spatial.transform import Rotation
 
 from darkmod import laue, scan
-from darkmod.beam import GaussianLineBeam
+from darkmod.beam import GaussianLineBeam, HeavysideBeam
 from darkmod.crl import CompundRefractiveLens
 from darkmod.crystal import Crystal
 from darkmod.deformation import (
@@ -86,35 +87,46 @@ if __name__ == "__main__":
 
     spatial_artefact = False
     detector_noise = False
-    reflection = 1
+    reflection = 4
+    savedir = "/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves"
+    plot = False
 
     if reflection == 1:  # Reflection #1
         hkl = np.array([-1, -1, 3])
         crystal.goniometer.omega = np.radians(6.431585)
-        thmax = 0.6
+        thmax = 0.0
         phimax = 1.4
         chimax = 2.4
-        ntheta = 11
-        nphi = 61
-        nchi = 61
+        ntheta = 5
+        nphi = 5
+        nchi = 5
     elif reflection == 2:  # Reflection #2
-        hkl = np.array([1.0, -1.0, 3.0])
-        crystal.goniometer.omega = np.radians(276.431585)
-        thmax = 0.6
-        phimax = 1.4
-        chimax = 2.4
-        ntheta = 11
-        nphi = 61
-        nchi = 21
-    elif reflection == 3:  # Reflection #3
         hkl = np.array([-1.0, 1.0, 3.0])
         crystal.goniometer.omega = np.radians(96.431585)
         thmax = 0.6
         phimax = 1.4
         chimax = 2.4
-        ntheta = 11
-        nphi = 61
-        nchi = 21
+        ntheta = 5
+        nphi = 5
+        nchi = 5
+    elif reflection == 3:  # Reflection #3
+        hkl = np.array([1.0, 1.0, 3.0])
+        crystal.goniometer.omega = np.radians(186.431585)
+        thmax = 0.6
+        phimax = 1.4
+        chimax = 2.4
+        ntheta = 5
+        nphi = 5
+        nchi = 5
+    elif reflection==4:
+        hkl = np.array([1.0, -1.0, 3.0])
+        crystal.goniometer.omega = np.radians(276.431585)
+        thmax = 0.6
+        phimax = 1.4
+        chimax = 2.4
+        ntheta = 5
+        nphi = 5
+        nchi = 5
 
     eta = np.radians(20.232593)
     theta = np.radians(15.416837)
@@ -124,51 +136,11 @@ if __name__ == "__main__":
     # Discretize the crystal
     xg = np.linspace(-1, 1, 33)  # microns
     yg = np.linspace(-1, 1, 33)  # microns
-    zg = np.linspace(-1, 1, 33)  # microns
+    #zg = np.linspace(-1, 1, 67)  # microns
     dx = xg[1] - xg[0]
-    zg = zg[len(zg)//2  - 1: len(zg)//2 + 2]
+    zg = np.array([0])
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
 
-    # OK !
-    # defgrad = unity_field(X.shape)
-
-    # OK !
-    # defgrad = linear_gradient(
-    #     X.shape,
-    #     component=(2, 2),
-    #     axis=1,
-    #     magnitude=0.001,
-    # )
-
-    # OK !
-    # defgrad = rotation_gradient(
-    # X.shape,
-    # rotation_axis=np.array([0, 1, 0]),
-    # axis=1,
-    # magnitude=0.1 * 1e-3,
-    # )
-
-    # OK !
-    # defgrad = multi_gradient(
-    #     X.shape,
-    #     component=(2, 2),
-    #     rotation_axis=np.array([0, 1, 0]),
-    #     axis=1,
-    #     rot_magnitude = 0.1 * 1e-3,
-    #     strain_magnitude = 10 * 1e-4,
-    # )
-
-    # OK !
-    # defgrad = multi_gradient(
-    #     X.shape,
-    #     component=(2, 2),
-    #     rotation_axis=np.array([1, 1, 1]),
-    #     axis=1,
-    #     rot_magnitude = 0.1 * 1e-3,
-    #     strain_magnitude = 10 * 1e-4,
-    # )
-    
-    # TODO: fix singularity....
     defgrad = straight_edge_dislocation((X, Y, Z), x0=[[0, 0, 0]])
 
     theta_values = np.linspace(-np.abs(thmax), thmax, ntheta) * 1e-3
@@ -222,18 +194,18 @@ if __name__ == "__main__":
         crl.magnification * dx * 0.17
     )  # this will split the phi chi over seevral pixels....
 
-    print("pixel_size", pixel_size)
-
     detector = Detector.orthogonal_mount(
         crl, pixel_size, det_row_count, det_col_count, super_sampling=1
     )
 
-    beam = GaussianLineBeam(z_std=0.1, energy=energy)
+    #beam = GaussianLineBeam(z_std=0.1, energy=energy)
+    beam = HeavysideBeam(y_width=1e8, z_width=1e8, energy=energy)
 
     dth = theta_values[1] - theta_values[0]
     dphi = phi_values[1] - phi_values[0]
     dchi = chi_values[1] - chi_values[0]
 
+    print("pixel_size", pixel_size)
     print(
         "Number of scan points is: ",
         (len(theta_values) * len(phi_values) * len(chi_values)),
@@ -265,7 +237,6 @@ if __name__ == "__main__":
     ps.print_stats(15)
     print("\n\nCPU time is : ", t2 - t1, "s")
 
-
     print("Subtracting background...")
     background = np.median(strain_mosa[:, 0:5, :, :]).astype(np.uint16)
     print("background", background)
@@ -278,35 +249,11 @@ if __name__ == "__main__":
     # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     # plt.tight_layout()
 
-
     mask = mask > np.max(mask) * 0.05
 
     mu, cov = darling.properties.moments(
         strain_mosa, coordinates=(theta_values, phi_values, chi_values)
     )
-
-    fig, ax = plt.subplots(1, 3, figsize=(16, 6))
-    _mu = crop(mu, mask)
-    for i in range(3):
-        # im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet")
-
-        if i == 0:
-            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.006, vmax=0.006)
-        if i == 1:
-            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.22, vmax=0.22)
-        if i == 2:
-            im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.22, vmax=0.22)
-
-        cbar = fig.colorbar(im, ax=ax[i], fraction=0.046 / 2.0, pad=0.04)
-        ax[i].set_title(
-            r"Mean " + [r"$\Delta \theta$", r"$\phi$", r"$\chi$"][i] + " [mrad]"
-        )
-        ax[i].set_xlabel("y [pixels]")
-        if i == 0:
-            ax[i].set_ylabel("z [pixels]")
-        ax[i].tick_params(axis="both", which="major", labelsize=16)
-        cbar.ax.tick_params(labelsize=16)
-    plt.tight_layout()
 
     # We expect to be able to approximate the mean Q vector along the ray paths.
     def expected_Q(crystal, beam, detector):
@@ -327,36 +274,14 @@ if __name__ == "__main__":
     Q_true = expected_Q(crystal, beam, detector)
 
     # sample space recon
-    # R @ Q_sample = Q_lab_0 => Q_sample = R_ij.T @ Q_lab_0
     Q_rec = np.zeros((mu.shape[0], mu.shape[1], 3))
-    q_sample_0 = crystal.UB_0 @ hkl / np.linalg.norm(crystal.UB_0 @ hkl)
-
-    # Rom = crystal.goniometer.get_R_omega(crystal.goniometer.omega)
-    # k_sample_hat = Rom @ np.array([1, 0, 0])
-    # rotvec = np.cross(k_sample_hat, q_sample_0)
-    # rotvec /= np.linalg.norm(rotvec)
-    M = resolution_function._get_M()
-
-    # sample space recon
-    # R @ Q_sample = Q_lab_0 => Q_sample = R_ij.T @ Q_lab_0
-    Q_rec = np.zeros((mu.shape[0], mu.shape[1], 3))
-    q_sample_0 = crystal.UB_0 @ hkl / np.linalg.norm(crystal.UB_0 @ hkl)
     R_omega = crystal.goniometer.get_R_omega(crystal.goniometer.omega)
-    print(crystal.goniometer.info)
     rotation_eta = Rotation.from_rotvec(np.array([1, 0, 0]) * (crl.eta))
-
     for i in range(mu.shape[0]):
         for j in range(mu.shape[1]):
             R_s = crystal.goniometer.get_R_top(mu[i, j, 1], mu[i, j, 2])
             d_rec = lambda_0 / (2 * np.sin(crl.theta + mu[i, j, 0]))
             Q_norm = 2 * np.pi / d_rec
-
-            # TODO:
-            # approximate:
-            # _x = np.array([1, 0, 0, 0, 2 * mu[i, j, 0]])
-            # Q_sample_0 = R_omega.T @ (M @ _x)
-
-            # exact:
             rotation_th = Rotation.from_rotvec(
                 np.array([0, 1, 0]) * (-2 * (crl.theta + mu[i, j, 0]))
             )
@@ -364,96 +289,137 @@ if __name__ == "__main__":
             _Q = rot @ np.array([1, 0, 0]) - np.array([1, 0, 0])
             _Q = _Q / np.linalg.norm(_Q)
             Q_sample_0 = R_omega.T @ _Q * Q_norm
-
-            # print(np.abs(Q_sample_0 - crystal.UB_0 @ hkl))
-
-            # angle = mu[i, j, 0]
-            # Ry_dth = Rotation.from_rotvec(rotvec * angle).as_matrix()
-            # s,c = np.sin(mu[i, j, 0]), np.cos(mu[i, j, 0])
-            # Ry_dth = np.array([[c,0,s],[0,1,0],[-s,0,c]])
-            # Q_rec[i, j] = R_s.T @ (Ry_dth @.T q_sample_0 * Q_norm)
             Q_rec[i, j] = R_s.T @ Q_sample_0
-
-    # Q_true[~mask,:]= np.nan
-    # Q_rec[~mask,:]= np.nan
 
     d_field_rec = (2 * np.pi) / np.linalg.norm(Q_rec, axis=-1)
     d_field_true = (2 * np.pi) / np.linalg.norm(Q_true, axis=-1)
     hkl_strain_rec = (d_field_rec - d_0) / d_0
     hkl_strain_true = (d_field_true - d_0) / d_0
 
-    fig, ax = plt.subplots(2, 3, figsize=(16, 12))
-    fig.suptitle(
-        r"True and reconstructed Q vectors (in lab)",
-    )
-    for j in range(2):
-        Qs = [Q_true, Q_rec]
-        _Q = Qs[j]
-        _Q[np.abs(_Q) < 1e-12] = 0
-        title = [r"True ", r"Estimated "][j]
-        for i in range(3):
-            vmin = np.nanmin(crop(Qs[1][:, :, i], mask))
-            vmax = np.nanmax(crop(Qs[1][:, :, i], mask))
-            im = ax[j, i].imshow(crop(_Q[:, :, i], mask), vmin=vmin, vmax=vmax)
-            cbar = fig.colorbar(im, ax=ax[j, i], fraction=0.046 / 2.0, pad=0.04)
-            ax[j, i].set_title(
-                title + [r"$Q_x$", r"$Q_y$", r"$Q_z$"][i],
-            )
-            if j == 1:
-                ax[j, i].set_xlabel("y [pixels]")
-            ax[j, i].set_ylabel("z [pixels]")
-            ax[j, i].tick_params(axis="both", which="major", labelsize=16)
-            cbar.ax.tick_params(labelsize=16)
-    plt.tight_layout()
-
-    fig, ax = plt.subplots(1, 2, figsize=(14, 7))
-    fig.suptitle(
-        r"True and reconstructed strain in hkl direction: ($d_0$ - d) / $d_0$ )",
-    )
-    strains = [hkl_strain_true, hkl_strain_rec]
-    cmaps = ["RdBu_r", "RdBu_r"]
-    titles = ["True", "Recon"]
-    for i in range(2):
-        im = ax[i].imshow(
-            crop(strains[i], mask), cmap=cmaps[i], vmin=-3 * 1e-5, vmax=3 * 1e-5
+    if savedir is not None:
+        np.savez(
+            os.path.join(savedir, "reflection_" + str(reflection)),
+            Q_rec=Q_rec,
+            Q_true=Q_true,
+            strain_mosa=strain_mosa,
+            hkl=hkl,
+            U_0=crystal.U,
+            B_0=crystal.B,
+            eta_0=crl.eta,
+            theta_0=crl.theta,
+            mu_0=crystal.goniometer.mu,
+            omega_0=crystal.goniometer.omega,
+            phi_0=crystal.goniometer.phi,
+            chi_0=crystal.goniometer.chi,
+            delta_theta=theta_values,
+            phi=phi_values,
+            chi=chi_values,
+            X=X,
+            Y=Y,
+            Z=Z,
+            defgrad=defgrad,
+            Q_sample_3D_true=crystal.get_Q_sample(hkl)
         )
-        fig.colorbar(im, ax=ax[i], fraction=0.046 / 2.0, pad=0.04)
-        ax[i].set_title(titles[i])
-    ax[0].set_xlabel("y [pixels]")
-    ax[1].set_xlabel("y [pixels]")
-    ax[0].set_ylabel("z [pixels]")
-    plt.tight_layout()
 
-    phi_mesh, chi_mesh = np.meshgrid(phi_values, chi_values, indexing="ij")
-    support = np.sum(strain_mosa, axis=(0, 1))[len(theta_values) // 2, :, :]
-    fig1, ax1 = plt.subplots(1, 1, figsize=(10, 8))
-    ax1.set_title("$\phi$-$\chi$  Log-Sparsity Scan Pattern")
-    im = ax1.pcolormesh(
-        chi_mesh * 1e3,
-        phi_mesh * 1e3,
-        np.log(support.clip(1)),
-        cmap="plasma",
-        edgecolors="black",
-    )
-    ax1.set_xlabel("$\chi$ [mrad]")
-    ax1.set_ylabel("$\phi$ [mrad]")
-    fig1.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
-    plt.tight_layout()
+    if plot:
+        fig, ax = plt.subplots(1, 3, figsize=(16, 6), sharex=True, sharey=True)
+        _mu = crop(mu, mask)
+        for i in range(3):
+            # im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet")
 
-    theta_mesh, chi_mesh = np.meshgrid(theta_values, chi_values, indexing="ij")
-    support = np.sum(strain_mosa, axis=(0, 1))[:, len(phi_values) // 2, :]
-    fig1, ax1 = plt.subplots(1, 1, figsize=(10, 8))
-    ax1.set_title("$\\theta$-$\chi$ Log-Sparsity Scan Pattern")
-    im = ax1.pcolormesh(
-        chi_mesh * 1e3,
-        theta_mesh * 1e3,
-        np.log(support.clip(1)),
-        cmap="plasma",
-        edgecolors="black",
-    )
-    ax1.set_xlabel("$\chi$ [mrad]")
-    ax1.set_ylabel("$\\theta$ [mrad]")
-    fig1.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
-    plt.tight_layout()
+            if i == 0:
+                im = ax[i].imshow(
+                    _mu[:, :, i] * 1e3, cmap="jet", vmin=-0.006, vmax=0.006
+                )
+            if i == 1:
+                im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.22, vmax=0.22)
+            if i == 2:
+                im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.22, vmax=0.22)
 
-    plt.show()
+            cbar = fig.colorbar(im, ax=ax[i], fraction=0.046 / 2.0, pad=0.04)
+            ax[i].set_title(
+                r"Mean " + [r"$\Delta \theta$", r"$\phi$", r"$\chi$"][i] + " [mrad]"
+            )
+            ax[i].set_xlabel("y [pixels]")
+            if i == 0:
+                ax[i].set_ylabel("z [pixels]")
+            ax[i].tick_params(axis="both", which="major", labelsize=16)
+            cbar.ax.tick_params(labelsize=16)
+        plt.tight_layout()
+
+        fig, ax = plt.subplots(2, 3, figsize=(16, 12), sharex=True, sharey=True)
+        fig.suptitle(
+            r"True and reconstructed Q vectors (in lab)",
+        )
+        for j in range(2):
+            Qs = [Q_true, Q_rec]
+            _Q = Qs[j]
+            _Q[np.abs(_Q) < 1e-12] = 0
+            title = [r"True ", r"Estimated "][j]
+            for i in range(3):
+                vmin = np.nanmin(crop(Qs[1][:, :, i], mask))
+                vmax = np.nanmax(crop(Qs[1][:, :, i], mask))
+                im = ax[j, i].imshow(crop(_Q[:, :, i], mask), vmin=vmin, vmax=vmax)
+                cbar = fig.colorbar(im, ax=ax[j, i], fraction=0.046 / 2.0, pad=0.04)
+                ax[j, i].set_title(
+                    title + [r"$Q_x$", r"$Q_y$", r"$Q_z$"][i],
+                )
+                if j == 1:
+                    ax[j, i].set_xlabel("y [pixels]")
+                if i == 0:
+                    ax[j, i].set_ylabel("z [pixels]")
+                ax[j, i].tick_params(axis="both", which="major", labelsize=16)
+                cbar.ax.tick_params(labelsize=16)
+        plt.tight_layout()
+
+        fig, ax = plt.subplots(1, 2, figsize=(14, 7), sharex=True, sharey=True)
+        fig.suptitle(
+            r"True and reconstructed strain in hkl direction: ($d_0$ - d) / $d_0$ )",
+        )
+        strains = [hkl_strain_true, hkl_strain_rec]
+        cmaps = ["RdBu_r", "RdBu_r"]
+        titles = ["True", "Recon"]
+        for i in range(2):
+            im = ax[i].imshow(
+                crop(strains[i], mask), cmap=cmaps[i], vmin=-3 * 1e-5, vmax=3 * 1e-5
+            )
+            fig.colorbar(im, ax=ax[i], fraction=0.046 / 2.0, pad=0.04)
+            ax[i].set_title(titles[i])
+        ax[0].set_xlabel("y [pixels]")
+        ax[1].set_xlabel("y [pixels]")
+        ax[0].set_ylabel("z [pixels]")
+        plt.tight_layout()
+
+        phi_mesh, chi_mesh = np.meshgrid(phi_values, chi_values, indexing="ij")
+        support = np.sum(strain_mosa, axis=(0, 1))[len(theta_values) // 2, :, :]
+        fig1, ax1 = plt.subplots(1, 1, figsize=(10, 8))
+        ax1.set_title("$\phi$-$\chi$  Log-Sparsity Scan Pattern")
+        im = ax1.pcolormesh(
+            chi_mesh * 1e3,
+            phi_mesh * 1e3,
+            np.log(support.clip(1)),
+            cmap="plasma",
+            edgecolors="black",
+        )
+        ax1.set_xlabel("$\chi$ [mrad]")
+        ax1.set_ylabel("$\phi$ [mrad]")
+        fig1.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+
+        theta_mesh, chi_mesh = np.meshgrid(theta_values, chi_values, indexing="ij")
+        support = np.sum(strain_mosa, axis=(0, 1))[:, len(phi_values) // 2, :]
+        fig1, ax1 = plt.subplots(1, 1, figsize=(10, 8))
+        ax1.set_title("$\\theta$-$\chi$ Log-Sparsity Scan Pattern")
+        im = ax1.pcolormesh(
+            chi_mesh * 1e3,
+            theta_mesh * 1e3,
+            np.log(support.clip(1)),
+            cmap="plasma",
+            edgecolors="black",
+        )
+        ax1.set_xlabel("$\chi$ [mrad]")
+        ax1.set_ylabel("$\\theta$ [mrad]")
+        fig1.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+
+        plt.show()

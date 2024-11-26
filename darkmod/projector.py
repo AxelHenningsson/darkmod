@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import astra
+from scipy.spatial.transform import Rotation
 
 
 class GpuProjector(object):
@@ -102,7 +103,9 @@ class GpuProjector(object):
         Returns:
             :obj:`np.ndarray`: The voxel volume populated by the backprojected values of detector_image.
         """
-        raise NotImplementedError("GpuProjector.backproject() has not yet been implemented.")
+        raise NotImplementedError(
+            "GpuProjector.backproject() has not yet been implemented."
+        )
 
     def _bin_projection(self, projection_image):
         """bin the image if super sampling was selected."""
@@ -169,6 +172,9 @@ if __name__ == "__main__":
 
     # data = np.ones((128, 128, 128), dtype=np.float32)
 
+    # TODO: look into making arrow image inx-y to understand projection
+    # TODO: implement backprojection operator.
+
     data = np.zeros((128, 128, 128), dtype=np.float32)
     pn, wn = 15, 4
 
@@ -204,73 +210,59 @@ if __name__ == "__main__":
     voxel_size = 0.165
     pixel_size = 1.2543
 
-    # we have the optical axis to project along in lab cooridnates
+    x, y, z = np.eye(3)
+    eta = np.radians(20.232593)
+    theta = np.radians(15.416837)
+    Reta = Rotation.from_rotvec(x * eta).as_matrix()
+    Rtheta = Rotation.from_rotvec(-2 * y * theta).as_matrix()
+    xi, yi, zi = (Reta @ Rtheta @ np.eye(3)).T
+    ray_direction = optical_axis = xi
 
-    ss = []
-    for theta in np.linspace(-np.radians(45), np.radians(45), 48):
-        # theta = np.radians(45)
-        s, c = np.sin(2 * theta), np.cos(2 * theta)
-        Ry = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
-        optical_axis = Ry.T @ np.array([1, 0, 0])
-        ray_direction = optical_axis
-        detector_distance = 3.8734514406173886
+    # place detector in xy plane, we shall align such that the 
+    # optical axis is orthogonal to the detector plane, and, at
+    # the same time, the projeciton of the lab-z-axis will be
+    # along the v = d2 - d0 directon of the detector, such that
+    # the rows on the detector alwys correspond to moving along
+    # the vertical (z) direction.
+    x, y, z = np.eye(3)
+    dr = pixel_size * det_row_count / 2.0
+    dc = pixel_size * det_col_count / 2.0
+    d0 = -y * dc - x * dr
+    d1 = d0 + y * det_col_count * pixel_size
+    d2 = d0 + z * det_row_count * pixel_size
+    detector_corners = np.array([d0, d1, d2]).T
 
-        y, z = np.array([0, 1, 0]), np.array([0, 0, 1])
-        zim = Ry.T @ z
-        dr = pixel_size * det_row_count / 2.0
-        dc = pixel_size * det_col_count / 2.0
-        d0 = optical_axis - y * dc - zim * dr
-        d1 = d0 + y * det_col_count * pixel_size
-        d2 = d0 + zim * det_row_count * pixel_size
+    # rotation 1 around the lab z axis
+    oxy = optical_axis[0:2] / np.linalg.norm(optical_axis[0:2])
+    alpha = np.arccos( y[0:2] @ oxy )
+    beta = np.pi/2. - alpha
+    R_beta = Rotation.from_rotvec(z * beta).as_matrix()
+    detector_corners = R_beta @ detector_corners
 
-        detector_corners = np.array([d0, d1, d2]).T
-        # print('optical_axis',optical_axis)
+    # rotation 2 around the lab z x optical_axis direction
+    gamma = np.arccos( optical_axis @ z )
+    beta = np.pi/2. - gamma
+    axis = np.cross(optical_axis, z)
+    axis /= np.linalg.norm(axis)
+    R_beta = Rotation.from_rotvec(axis*beta).as_matrix()
+    detector_corners = R_beta @ detector_corners
 
-        # print('d0',d0)
+    print(np.degrees(gamma))
+    print(np.degrees(beta))
 
-        # a = d1 - d0
-        # b = d2 - d0
-        # c = np.cross(a, b)
-        # c /= np.linalg.norm(c)
-        # print(c, optical_axis)
-        # print(d0 - optical_axis * det_col_count)
+    u = (d1 - d0) / ( np.linalg.norm(d1 - d0) )
+    v = (d2 - d0) / ( np.linalg.norm(d2 - d0) )
+    alpha = np.arccos( optical_axis @ u )
+    beta = np.arccos( optical_axis @ v )
+    print(np.degrees(alpha))
+    print(np.degrees(beta))
 
-        projector = GpuProjector(
-            detector_corners, pixel_size, det_row_count, det_col_count, super_sampling=2
-        )
-
-        # import cProfile
-        # import pstats
-        # import time
-
-        # pr = cProfile.Profile()
-        # pr.enable()
-        # t1 = time.perf_counter()
-
-        mag_vox_size = voxel_size * 10
-        image = projector(data, mag_vox_size, ray_direction)
-
-        # print(image.sum())
-
-        # t2 = time.perf_counter()
-        # pr.disable()
-        # pr.dump_stats("tmp_profile_dump")
-        # ps = pstats.Stats("tmp_profile_dump").strip_dirs().sort_stats("cumtime")
-        # ps.print_stats(15)
-        # print("\n\nCPU time is : ", t2 - t1, "s")
-
-        print("image", image.sum())
-
-        ss.append(image.sum())
-
-    plt.figure(figsize=(8, 6))
-    plt.plot(np.linspace(-np.radians(45), np.radians(45), 48), ss)
-    plt.grid(True)
-    plt.show()
-
-    plt.figure(figsize=(8, 6))
-    plt.hist(np.array(ss) - np.mean(ss))
-    plt.show()
+    projector = GpuProjector(
+        detector_corners, pixel_size, det_row_count, det_col_count, super_sampling=2
+    )
+    
+    mag_vox_size = voxel_size * 10
+    image = projector(data, mag_vox_size, ray_direction)
 
     plt.style.use("dark_background")
     fig, ax = plt.subplots(1, 1, figsize=(7, 7))

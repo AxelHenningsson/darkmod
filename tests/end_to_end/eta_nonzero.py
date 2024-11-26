@@ -92,7 +92,7 @@ if __name__ == "__main__":
     detector_noise = False
     chimax = 2.5
     phimax = 0.22
-    nphi = 41
+    nphi = 11
     nchi = 11
 
     crystal.discretize(X, Y, Z, defgrad)

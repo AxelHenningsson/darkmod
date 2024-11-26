@@ -76,7 +76,10 @@ class Crystal(object):
 
         dx = X[1, 0, 0] - X[0, 0, 0]
         dy = Y[0, 1, 0] - Y[0, 0, 0]
-        dz = Z[0, 0, 1] - Z[0, 0, 0]
+        if Z.shape[2] > 1:
+            dz = Z[0, 0, 1] - Z[0, 0, 0]
+        else:
+            dz = dx
         assert dx == dy and dx == dz, "voxels must be cubic"
         self.voxel_size = dx
 
@@ -483,7 +486,7 @@ class Crystal(object):
             crl (:obj:`darkmod.crl.CompundRefractiveLens`): The compund refractive lens.
             detector (:obj:`darkmod.detector.Detector`): The detector.
             beam (:obj:`darkmod.detector.Beam`): The x-ray beam.
-            spatial_artefact (bool, optional): Simulate artefacts due to spatial offset from 
+            spatial_artefact (bool, optional): Simulate artefacts due to spatial offset from
                 the optical axis causing a shift in the mean of the resolution function. Defaults to True.
 
         Returns:

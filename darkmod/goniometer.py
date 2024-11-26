@@ -21,10 +21,9 @@ class Goniometer:
         """
         self.phi = self.chi = self.mu = self.omega = 0
 
-        self._xhat_lab = np.array([1., 0., 0.])
-        self._yhat_lab = np.array([0., 1., 0.])
-        self._zhat_lab = np.array([0., 0., 1.])
-
+        self._xhat_lab = np.array([1.0, 0.0, 0.0])
+        self._yhat_lab = np.array([0.0, 1.0, 0.0])
+        self._zhat_lab = np.array([0.0, 0.0, 1.0])
 
     def relative_move(self, dphi=None, dchi=None, domega=None, dmu=None):
         if dphi is not None:
@@ -54,11 +53,15 @@ class Goniometer:
 
         """
         if rotation is not None:
-            self.phi, self.chi, self.omega, self.mu = self._rotation_to_motor_angles(rotation)
+            self.phi, self.chi, self.omega, self.mu = self._rotation_to_motor_angles(
+                rotation
+            )
         elif None not in (phi, chi, omega, mu):
             self.phi, self.chi, self.omega, self.mu = phi, chi, omega, mu
         else:
-            raise ValueError('Either pass a scipy.spatial.transform.Rotation or 4 floats: phi, chi, omega, mu.')
+            raise ValueError(
+                "Either pass a scipy.spatial.transform.Rotation or 4 floats: phi, chi, omega, mu."
+            )
 
     def _rotation_to_motor_angles(self, rotation):
         """Convert a rotation element into goniometer motor angles.
@@ -73,10 +76,12 @@ class Goniometer:
         """
         if isinstance(rotation, np.ndarray):
             rotation = Rotation.from_matrix(rotation)
-        axes = np.array([self._xhat_lab, self._zhat_lab, self._yhat_lab]) # Phi then Chi then Mu
-        chi, omega, mu = Rotation.as_davenport(rotation, axes, order='extrinsic')
+        axes = np.array(
+            [self._xhat_lab, self._zhat_lab, self._yhat_lab]
+        )  # Phi then Chi then Mu
+        chi, omega, mu = Rotation.as_davenport(rotation, axes, order="extrinsic")
         return 0, chi, omega, mu
-    
+
     def get_R_top(self, phi, chi):
         """Construct a joint rotation object for the top level motors phi and chi.
 
@@ -89,8 +94,7 @@ class Goniometer:
         """
         Ry_phi = Rotation.from_rotvec(self._yhat_lab * phi)
         Rx_chi = Rotation.from_rotvec(self._xhat_lab * chi)
-        return  HighPrecisionRotation(Rx_chi * Ry_phi)
-
+        return HighPrecisionRotation(Rx_chi * Ry_phi)
 
     def get_R_phi(self, phi):
         """Construct a rotation object for an input phi.
@@ -115,7 +119,7 @@ class Goniometer:
         """
         Rx_chi = Rotation.from_rotvec(self._xhat_lab * chi)
         return HighPrecisionRotation(Rx_chi)
-    
+
     def get_R_omega(self, omega):
         """Construct a rotation object for an input omega.
 
@@ -159,16 +163,14 @@ class Goniometer:
         R_goni = HighPrecisionRotation(Ry_mu * Rz_omega * Rx_chi * Ry_phi)
         return R_goni
 
-    @property
     def info(self):
-        print('\n')
-        print('---------------------------------------------------------------------')
-        print('Goniometer is at angles (degrees) : ')
-        print('---------------------------------------------------------------------')
+        print("\n")
+        print("------------------------------------------------------")
+        print("Goniometer is at angles (degrees) : ")
+        print("------------------------------------------------------")
         for key in self.motors:
             print(key.ljust(7), str(np.round(self.motors[key], 6)))
-        print('---------------------------------------------------------------------')
-        print('\n')
+        print("------------------------------------------------------")
 
     @property
     def motors(self):
@@ -177,7 +179,9 @@ class Goniometer:
         Returns:
             dict: Goniometer angles with keys 'phi', 'chi', 'omega', and 'mu', (units of degrees)
         """
-        return {'phi': np.degrees(self.phi),
-                'chi': np.degrees(self.chi),
-                'omega': np.degrees(self.omega),
-                'mu': np.degrees(self.mu)}
+        return {
+            "phi": np.degrees(self.phi),
+            "chi": np.degrees(self.chi),
+            "omega": np.degrees(self.omega),
+            "mu": np.degrees(self.mu),
+        }

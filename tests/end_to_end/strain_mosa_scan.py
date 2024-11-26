@@ -96,8 +96,8 @@ if __name__ == "__main__":
     phimax = 0.45
     chimax = 2.7
 
-    ntheta = 21
-    nphi = 21
+    ntheta = 11
+    nphi = 11
     nchi = 7
 
     theta_values = np.linspace(-np.abs(thmax), thmax, ntheta) * 1e-3

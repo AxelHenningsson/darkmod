@@ -21,7 +21,6 @@ def straight_edge_dislocation(coord, x0=[[0, 0, 0]], v=0.334, b=2.86 * 1e-4):
     # dislocation system basis matrix
     U_d = np.array([[1, -1, 0], [1, 1, -1], [1, 1, 2]]).T
     U_d = U_d / np.linalg.norm(U_d, axis=0)
-    print(np.linalg.norm(U_d, axis=0), U_d)
 
     # dislocation system voxel cooridnates.
     X, Y, Z = U_d.T @ np.array([c.flatten() for c in coord])
