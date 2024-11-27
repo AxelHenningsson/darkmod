@@ -36,7 +36,6 @@ class Detector(object):
         self.super_sampling = super_sampling
 
         self._projector = GpuProjector(
-            self.detector_corners,
             self.pixel_size,
             self.det_row_count,
             self.det_col_count,
@@ -137,22 +136,28 @@ class Detector(object):
         self,
         voxel_volume,
         voxel_size,
-        crl,
+        optical_axis,
+        magnification,
         sample_rotation=np.eye(3),
     ):
-        """_summary_
+        """Render an image by projecting the voxel_volume unto the detector plane.
+
+        NOTE: this uses tomographic ray-tracing in conjuction with crl image inversion
+            and magnification considerations.
 
         Args:
             voxel_volume (:obj:`np.ndarray`): The sample voxel volume with the scalar
                 diffracted intensity in each voxel. shape=(m,n,o).
             voxel_size (_type_): voxel size in microns.
-            crl (obj:`darkmod.crl.CompoundRefractiveLens`): The crl.
+            optical_axis (::obj:`np.ndarray`): The optical axis (this is the ray path
+                at sample_rotation=np.eye(3)), shape=(3,)
+            magnification (:obj:`float`): The crl magnification.
             sample_rotation (:obj:`np.ndarray`): The rotation matrix that brings sample vectors
                 to lab frame. I.e the goniometer setting. Defaults to np.eye(3) in which case
                 sample and lab frames are considered to be aligned. shape=(3,3).
 
         Returns:
-            _type_: The detector image
+            :obj:`np.ndarray`: The detector image of shape=(det_row_count, det_col_count)
         """
 
         # The backrotation of the detector by the goniometer setting simulates the
@@ -162,13 +167,12 @@ class Detector(object):
         # support rotated volumes. Also, this is faster than rotating all the voxels
         # in the volume, here we require to only rotate the optical axis and the
         # detector corners.
-
-        self._projector.detector_corners = sample_rotation.T @ self.detector_corners
-        ray_direction = sample_rotation.T @ crl.optical_axis
+        detector_corners = sample_rotation.T @ self.detector_corners
+        ray_direction = sample_rotation.T @ optical_axis
 
         # The CRL will magnify the sample voxel_volume. We simulate this by passing
         # a virtual voxel size to the projector, scaled by the crl magnification.
-        magnified_voxel_size = voxel_size * crl.magnification
+        magnified_voxel_size = voxel_size * magnification
 
         # The voxel volume can now be tomographically ray-traced along the
         # diffracted ray_direction resultingin a detector image.
@@ -176,30 +180,43 @@ class Detector(object):
             voxel_volume,
             magnified_voxel_size,
             ray_direction,
+            detector_corners,
         )
 
         # The resulting image should be inverted due to the CRL lens effect.
-        detector_image = np.flipud(np.fliplr(detector_image))
+        detector_image = self._invert(detector_image)
 
         return detector_image
 
-    def backproject(
+    def backpropagate(
         self,
         detector_image,
         voxel_volume_shape,
         voxel_size,
-        crl,
+        optical_axis,
+        magnification,
         sample_rotation=np.eye(3),
     ):
         """Backpropagate the pixel values of a detector image to the sample volume.
 
-        This is similar to a tomographic backprojection operation.
+        This is similar to a tomographic back-projection operation.
+
+        NOTE: this function internally handles the inversion properties of the crl such that
+        the relationship beteen real-space and detector spaced can be mapped. Therefore, the
+        input detector_image should be the image recorded by the detector, in the same way as
+        is simulated by the render() method.
+
+        NOTE: The values in the 3D backpropagated volumes are the values in the input detector_image
+        pasted along the lines defined by the ray geometry. I.e, there is no accumulation of intensity
+        or mulitplication by the voxel ray clip lenghts.
 
         Args:
-            detector_image (:obj:`np.ndarray`): The 2d image to be backprojected.
+            detector_image (:obj:`np.ndarray`): The 2d image to be backprojected. shape=(m,n)
             voxel_volume_shape (:obj:`tuple` of :obj:`int`): The sample voxel volume shape.
             voxel_size (:obj:`float`): voxel size in microns.
-            crl (obj:`darkmod.crl.CompoundRefractiveLens`): The crl.
+            optical_axis (::obj:`np.ndarray`): The optical axis (this is the ray path
+                at sample_rotation=np.eye(3)), shape=(3,)
+            magnification (:obj:`float`): The crl magnification.
             sample_rotation (:obj:`np.ndarray`): The rotation matrix that brings sample vectors
                 to lab frame. I.e the goniometer setting. Defaults to np.eye(3) in which case
                 sample and lab frames are considered to be aligned. shape=(3,3).
@@ -207,7 +224,36 @@ class Detector(object):
         Returns:
             :obj:`np.ndarray`: The voxel volume populated by the backprojected values of detector_image.
         """
-        raise NotImplementedError("backproject() has not yet been implemented.")
+
+        detector_corners = sample_rotation.T @ self.detector_corners
+        ray_direction = sample_rotation.T @ optical_axis
+        magnified_voxel_size = voxel_size * magnification
+
+        projection_image = self._invert(detector_image)
+
+        normbp = self._projector.backproject(
+            np.ones_like(projection_image),
+            voxel_volume_shape,
+            magnified_voxel_size,
+            ray_direction,
+            detector_corners,
+        )
+
+        acc_backprojection = self._projector.backproject(
+            projection_image,
+            voxel_volume_shape,
+            magnified_voxel_size,
+            ray_direction,
+            detector_corners,
+        )
+
+        backprojection = np.divide(
+            acc_backprojection,
+            normbp,
+            where=normbp != 0,
+        )
+
+        return backprojection
 
     def noise(self, image_stack, mu=99.453, std=2.317):
         """Thermal + Shot noise model for detector counting errors.
@@ -226,6 +272,10 @@ class Detector(object):
             loc=mu, scale=std, size=shot_noise.shape
         )
         return thermal_noise
+
+    def _invert(self, image):
+        """Apply inversion simulating the effect of the crl on ray-paths."""
+        return np.flipud(np.fliplr(image))
 
 
 def _get_det_corners_wall_mount(
@@ -293,8 +343,6 @@ def _get_det_corners_orthogonal_mount(
 
 if __name__ == "__main__":
 
-    # data = np.ones((128, 128, 128), dtype=np.float32)
-
     data = np.zeros((128, 128, 128), dtype=np.float32)
     pn, wn = 15, 4
 
@@ -339,69 +387,54 @@ if __name__ == "__main__":
         number_of_lenses, lens_space, lens_radius, refractive_decrement, magnification
     )
 
-    ss = []
-    thetas = np.linspace(-np.radians(45), np.radians(45), 64)
-    for theta in thetas:
-        crl.goto(theta=theta, eta=0)
+    from scipy.spatial.transform import Rotation
+    np.random.seed(0)
+    rotvec = np.random.normal(scale=np.radians(25), size=(3,))
+    sample_rotation = Rotation.from_rotvec(rotvec).as_matrix()
 
-        detector = Detector.orthogonal_mount(
-            crl, pixel_size, det_row_count, det_col_count, super_sampling=2
-        )
-
-        # import cProfile
-        # import pstats
-        # import time
-
-        # pr = cProfile.Profile()
-        # pr.enable()
-        # t1 = time.perf_counter()
-
-        image = detector.render(data, voxel_size, crl)
-
-        # t2 = time.perf_counter()
-        # pr.disable()
-        # pr.dump_stats("tmp_profile_dump")
-        # ps = pstats.Stats("tmp_profile_dump").strip_dirs().sort_stats("cumtime")
-        # ps.print_stats(15)
-        # print("\n\nCPU time is : ", t2 - t1, "s")
-
-        print("image", image.sum())
-        ss.append(image.sum())
-
-    print("noise: ", (np.max(ss) - np.min(ss)) / np.min(ss))
-    plt.figure(figsize=(8, 6))
-    plt.plot(thetas, ss)
-    plt.grid(True)
-    plt.show()
-
-    plt.figure(figsize=(8, 6))
-    plt.hist(np.array(ss) - np.mean(ss))
-    plt.show()
-
-    crl.goto(theta=-0.39, eta=0)
+    crl.goto(theta=np.radians(8), eta=0)
 
     detector = Detector.orthogonal_mount(
         crl, pixel_size, det_row_count, det_col_count, super_sampling=2
     )
-    image = detector.render(data, voxel_size, crl)
 
-    plt.style.use("dark_background")
-    fig, ax = plt.subplots(1, 1, figsize=(7, 7))
-    im = ax.imshow(image)
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    plt.tight_layout()
-    plt.show()
-
-    crl.goto(theta=np.radians(-3), eta=0)
-
-    detector = Detector.orthogonal_mount(
-        crl, pixel_size, det_row_count, det_col_count, super_sampling=2
+    image = detector.render(
+        data,
+        voxel_size,
+        crl.optical_axis,
+        crl.magnification,
+        sample_rotation=sample_rotation,
     )
-    image = detector.render(data, voxel_size, crl)
 
+    backprojection = detector.backpropagate(
+        image,
+        data.shape,
+        voxel_size,
+        crl.optical_axis,
+        crl.magnification,
+        sample_rotation=sample_rotation,
+    )
+    print(np.max(backprojection), np.max(data), image.dtype)
+
+    m, n, o = backprojection.shape
+
+    fontsize = 32  # General font size for all text
+    ticksize = 32  # tick size
+    plt.rcParams["font.size"] = fontsize
+    plt.rcParams["xtick.labelsize"] = ticksize
+    plt.rcParams["ytick.labelsize"] = ticksize
     plt.style.use("dark_background")
-    fig, ax = plt.subplots(1, 1, figsize=(7, 7))
-    im = ax.imshow(image)
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    fig, ax = plt.subplots(1, 3, figsize=(28, 14))
+    ax[2].set_title("cut in Backprojection")
+    im = ax[2].imshow(backprojection[m // 2, :, :])
+    fig.colorbar(im, ax=ax[2], fraction=0.046, pad=0.04)
+    ax[0].set_title("cut in Volume")
+    im = ax[0].imshow(data[m // 2, :, :])
+    fig.colorbar(im, ax=ax[0], fraction=0.046, pad=0.04)
+    ax[1].set_title("Projection")
+    im = ax[1].imshow(image)
+    fig.colorbar(im, ax=ax[1], fraction=0.046, pad=0.04)
     plt.tight_layout()
+
     plt.show()

@@ -244,7 +244,7 @@ if __name__ == "__main__":
                     Qlw[:, :, :, i], crystal.voxel_size, crl, crystal.goniometer.R
                 )
             w = detector.render(
-                sample_beam_density, crystal.voxel_size, crl, crystal.goniometer.R
+                sample_beam_density, crystal.voxel_size, crl.optical_axis, crl.magnification, crystal.goniometer.R
             )
             return Q_true / w[:, :, np.newaxis]
 

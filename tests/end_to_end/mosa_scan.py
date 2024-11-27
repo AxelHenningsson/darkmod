@@ -223,11 +223,11 @@ if __name__ == "__main__":
             Q_true = np.zeros((mu.shape[0], mu.shape[1], 3))
             for i in range(3):
                 Q_true[:, :, i] = detector.render(
-                    Qlw[:, :, :, i], crystal.voxel_size, crl, crystal.goniometer.R
+                    Qlw[:, :, :, i], crystal.voxel_size, crl.optical_axis, crl.magnification, crystal.goniometer.R
                 )
 
             w = detector.render(
-                sample_beam_density, crystal.voxel_size, crl, crystal.goniometer.R
+                sample_beam_density, crystal.voxel_size, crl.optical_axis, crl.magnification, crystal.goniometer.R
             )
             return Q_true / w[:, :, np.newaxis]
 

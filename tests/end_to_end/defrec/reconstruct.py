@@ -7,13 +7,11 @@ import pstats
 import time
 
 plt.style.use("dark_background")
-fontsize = 16  # General font size for all text
-ticksize = 16  # tick size
+fontsize = 32  # General font size for all text
+ticksize = 32  # tick size
 plt.rcParams["font.size"] = fontsize
 plt.rcParams["xtick.labelsize"] = ticksize
 plt.rcParams["ytick.labelsize"] = ticksize
-
-
 
 def _lsq(Q, G_0, mask):
     """Solve many independent LSQ problems over a 2D field.
@@ -43,19 +41,22 @@ def _lsq(Q, G_0, mask):
     y_T = Q.reshape(m * n, 3, k).transpose(0, 2, 1)[mask.flatten()]
     U, S, Vt = np.linalg.svd(y_T, full_matrices=False)
     _numerical_zeros = S < 1e-8
-    S[~_numerical_zeros] = 1. / S[~_numerical_zeros]
+    S[~_numerical_zeros] = 1.0 / S[~_numerical_zeros]
     S[_numerical_zeros] = 0
     s = Vt.transpose(0, 2, 1) @ (S[..., np.newaxis] * (U.transpose(0, 2, 1) @ G_0.T))
-    solution = np.zeros((m,  n, 3, 3))
+    solution = np.zeros((m, n, 3, 3))
     solution[mask] = s
     if 1:
         F_sample_check = np.zeros((m, n, 3, 3))
         for i in range(m):
             for j in range(n):
                 if mask[i, j]:
-                    F_sample_check[i, j] = np.linalg.lstsq(Q[i, j, ...].T, G_0.T, rcond=None)[0]
+                    F_sample_check[i, j] = np.linalg.lstsq(
+                        Q[i, j, ...].T, G_0.T, rcond=None
+                    )[0]
         assert np.allclose(solution, F_sample_check)
     return solution
+
 
 def deformation(diffraction_vectors, hkl, omega, UB_reference):
 
@@ -65,11 +66,11 @@ def deformation(diffraction_vectors, hkl, omega, UB_reference):
     m, n, _, k = Q.shape
     mask = ~np.any(np.isnan(Q.reshape(m * n, 3 * k)), axis=1).reshape(m, n)
 
-    if 0:
+    if 1:
 
-        fig, ax = plt.subplots(3, 3, figsize=(16, 9), sharex=True, sharey=True)
+        fig, ax = plt.subplots(3, 3, figsize=(22, 16), sharex=True, sharey=True)
         fig.suptitle(
-            r"Three reflections (in sample coord)",
+            r"Backpropagated Reflections (sample coord)",
         )
         for j in range(3):
             rt = [r"#1", r"#2", r"#3"][j]
@@ -79,12 +80,17 @@ def deformation(diffraction_vectors, hkl, omega, UB_reference):
                 if j == 0:
                     ax[j, i].set_title([r"$Q_x$", r"$Q_y$", r"$Q_z$"][i])
                 if j == 2:
-                    ax[j, i].set_xlabel("y [pixels]")
+                    ax[j, i].set_xlabel("y [voxels]")
                 if i == 0:
                     om = np.round(np.degrees(omega[j]), 1)
-                    ax[j, i].set_ylabel("Reflection " + rt + "\n$\omega$="+str(om)+"$^o$"+"\nz [pixels]")
-                ax[j, i].tick_params(axis="both", which="major", labelsize=16)
-                cbar.ax.tick_params(labelsize=16)
+                    ax[j, i].set_ylabel(
+                        "Reflection "
+                        + rt
+                        + "\n$\omega$="
+                        + str(om)
+                        + "$^o$"
+                        + "\nz [voxels]"
+                    )
 
         for a in ax.flatten():
             for spine in a.spines.values():
@@ -134,9 +140,14 @@ if __name__ == "__main__":
     UB_reference = data[0]["U_0"] @ data[0]["B_0"]
 
     # this works as expected.
+    # diffraction_vectors = [
+    #    reflection["Q_sample_3D_true"][:, :, 0, :] for reflection in data
+    # ]
+
     diffraction_vectors = [
-        reflection["Q_sample_3D_true"][:, :, 0, :] for reflection in data
+       reflection["bp_Q_sample_3D_true"][:, :, 0, :] for reflection in data
     ]
+
 
     # Run the reconstructor to get back the deformation gradient tensor field
     defgrad = deformation(
@@ -155,19 +166,19 @@ if __name__ == "__main__":
         beta_true_3D[..., i, i] -= 1
 
     plt.style.use("dark_background")
-    fig, ax = plt.subplots(3, 3, figsize=(15, 9), sharex=True, sharey=True)
+    fig, ax = plt.subplots(3, 3, figsize=(22, 16), sharex=True, sharey=True)
     fig.suptitle("Reconstructed elastic distortion ($\\beta$) field around dislocation")
     for i in range(3):
         for j in range(3):
             _s = crop(beta[:, :, i, j], mask)
 
             # detector flips
-            #_s = np.flipud(np.fliplr(_s))
+            # _s = np.flipud(np.fliplr(_s))
 
             # make x along rows and y along cols
-            #_s = np.fliplr(_s)
+            # _s = np.fliplr(_s)
 
-            vmax = np.nanmax(np.abs(_s)) * 0.75
+            vmax = np.nanmax(np.abs(beta_true_3D[:, :, 0, i, j])) * 0.75
             vmin = -vmax
             im = ax[i, j].imshow(
                 _s,
@@ -177,7 +188,7 @@ if __name__ == "__main__":
             )
             ax[i, j].annotate(
                 r"$\boldsymbol{\beta}_{" + str(i + 1) + str(j + 1) + r"}$",
-                (1, 3),
+                (5, 15),
                 c="black",
             )
             fig.colorbar(im, ax=ax[i, j], fraction=0.046, pad=0.04)
@@ -190,8 +201,10 @@ if __name__ == "__main__":
         for spine in a.spines.values():
             spine.set_visible(False)
     plt.style.use("dark_background")
-    fig, ax = plt.subplots(3, 3, figsize=(15, 9), sharex=True, sharey=True)
-    fig.suptitle("Real space true elastic distortion ($\\beta$) field around dislocation")
+    fig, ax = plt.subplots(3, 3, figsize=(22, 16), sharex=True, sharey=True)
+    fig.suptitle(
+        "Real space true elastic distortion ($\\beta$) field around dislocation"
+    )
     for i in range(3):
         for j in range(3):
             # _s = crop(beta[:, :, i, j], mask)
@@ -207,7 +220,7 @@ if __name__ == "__main__":
             )
             ax[i, j].annotate(
                 r"$\boldsymbol{\beta}_{" + str(i + 1) + str(j + 1) + r"}$",
-                (1, 3),
+                (5, 15),
                 c="black",
             )
             fig.colorbar(im, ax=ax[i, j], fraction=0.046, pad=0.04)

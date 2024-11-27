@@ -260,12 +260,12 @@ if __name__ == "__main__":
         # We expect to be able to approximate the mean Q vector along the ray paths.
         Q_lab_vol = crystal.get_Q_lab(hkl)
 
-        Qx = detector.render(Q_lab_vol[:,:,:,0], crystal.voxel_size, crl, crystal.goniometer.R)
-        Qy = detector.render(Q_lab_vol[:,:,:,1], crystal.voxel_size, crl, crystal.goniometer.R)
-        Qz = detector.render(Q_lab_vol[:,:,:,2], crystal.voxel_size, crl, crystal.goniometer.R)
+        Qx = detector.render(Q_lab_vol[:,:,:,0], crystal.voxel_size, crl.optical_axis, crl.magnification, crystal.goniometer.R)
+        Qy = detector.render(Q_lab_vol[:,:,:,1], crystal.voxel_size, crl.optical_axis, crl.magnification, crystal.goniometer.R)
+        Qz = detector.render(Q_lab_vol[:,:,:,2], crystal.voxel_size, crl.optical_axis, crl.magnification, crystal.goniometer.R)
 
         sample_density = np.ones((Q_lab_vol.shape[0], Q_lab_vol.shape[1], Q_lab_vol.shape[2])) # TODO: should be beam density?
-        sample = detector.render(sample_density, crystal.voxel_size, crl, crystal.goniometer.R)
+        sample = detector.render(sample_density, crystal.voxel_size, crl.optical_axis, crl.magnification, crystal.goniometer.R)
         Q_true = np.stack((Qx, Qy, Qz), axis=-1) / sample[:, :, np.newaxis]
         Q_true /= np.linalg.norm(Q_true, axis=-1)[:, :, np.newaxis]
 

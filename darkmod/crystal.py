@@ -510,7 +510,8 @@ class Crystal(object):
             # self._prune_volume(voxel_volume),
             voxel_volume,
             self.voxel_size,
-            crl,
+            crl.optical_axis,
+            crl.magnification,
             self.goniometer.R,
         )
 

@@ -180,7 +180,7 @@ if __name__ == "__main__":
             beam,
         )
 
-        #image = detector.render(data, crystal.voxel_size, crl, crystal.goniometer.R)
+        #image = detector.render(data, crystal.voxel_size, crl.optical_axis, crl.magnification, crystal.goniometer.R)
 
         # plt.style.use('dark_background')
         # fig, ax = plt.subplots(1, 1, figsize=(7,7))

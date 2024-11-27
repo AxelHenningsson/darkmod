@@ -87,7 +87,7 @@ if __name__ == "__main__":
 
     spatial_artefact = False
     detector_noise = False
-    reflection = 4
+    reflection = 1
     savedir = "/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves"
     plot = False
 
@@ -118,7 +118,7 @@ if __name__ == "__main__":
         ntheta = 5
         nphi = 5
         nchi = 5
-    elif reflection==4:
+    elif reflection == 4:
         hkl = np.array([1.0, -1.0, 3.0])
         crystal.goniometer.omega = np.radians(276.431585)
         thmax = 0.6
@@ -134,10 +134,10 @@ if __name__ == "__main__":
     crl.goto(theta, eta)
 
     # Discretize the crystal
-    xg = np.linspace(-1, 1, 33)  # microns
-    yg = np.linspace(-1, 1, 33)  # microns
-    #zg = np.linspace(-1, 1, 67)  # microns
-    dx = xg[1] - xg[0]
+    xg = np.linspace(-1, 1, 33*4 + 1)  # microns
+    yg = np.linspace(-1, 1, 33*4 + 1)  # microns
+    # zg = np.linspace(-1, 1, 67)  # microns
+    dx = 4 * (xg[1] - xg[0])
     zg = np.array([0])
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
 
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     FWHM_CRL_vertical = 0.556 * 1e-3
     angular_tilt = 0.73 * 1e-3  # perhaps this is what happened in Poulsen 2017?
     # the idea is that a slight horizontal titlt of the CRL will cause the
-    # NA in the horixontal plane to decrease which would explain the rolling curve
+    # NA in the horixontal plane to decrease which would explain the rolling curves
     # discrepancies.
     dh = (crl.length * np.sin(angular_tilt)) * 1e-6
     FWHM_CRL_horizontal = FWHM_CRL_vertical - 2 * dh
@@ -198,7 +198,7 @@ if __name__ == "__main__":
         crl, pixel_size, det_row_count, det_col_count, super_sampling=1
     )
 
-    #beam = GaussianLineBeam(z_std=0.1, energy=energy)
+    # beam = GaussianLineBeam(z_std=0.1, energy=energy)
     beam = HeavysideBeam(y_width=1e8, z_width=1e8, energy=energy)
 
     dth = theta_values[1] - theta_values[0]
@@ -264,12 +264,26 @@ if __name__ == "__main__":
         Q_true = np.zeros((mu.shape[0], mu.shape[1], 3))
         for i in range(3):
             Q_true[:, :, i] = detector.render(
-                Qlw[:, :, :, i], crystal.voxel_size, crl, crystal.goniometer.R
+                Qlw[:, :, :, i],
+                crystal.voxel_size,
+                crl.optical_axis,
+                crl.magnification,
+                crystal.goniometer.R,
             )
         w = detector.render(
-            sample_beam_density, crystal.voxel_size, crl, crystal.goniometer.R
+            sample_beam_density,
+            crystal.voxel_size,
+            crl.optical_axis,
+            crl.magnification,
+            crystal.goniometer.R,
         )
-        return Q_true / w[:, :, np.newaxis]
+        Q_true = np.divide(
+            Q_true,
+            w[:, :, np.newaxis],
+            out=np.full_like(Q_true, np.nan),
+            where=w[:, :, np.newaxis] != 0,
+        )
+        return Q_true
 
     Q_true = expected_Q(crystal, beam, detector)
 
@@ -296,6 +310,17 @@ if __name__ == "__main__":
     hkl_strain_rec = (d_field_rec - d_0) / d_0
     hkl_strain_true = (d_field_true - d_0) / d_0
 
+    bp_Q_sample_3D_true = np.zeros((*X.shape, 3))
+    for i in range(3):
+        bp_Q_sample_3D_true[..., i] = detector.backpropagate(
+            Q_true[..., i],
+            X.shape,
+            crystal.voxel_size,
+            crl.optical_axis,
+            crl.magnification,
+            crystal.goniometer.R,
+        )
+
     if savedir is not None:
         np.savez(
             os.path.join(savedir, "reflection_" + str(reflection)),
@@ -318,7 +343,15 @@ if __name__ == "__main__":
             Y=Y,
             Z=Z,
             defgrad=defgrad,
-            Q_sample_3D_true=crystal.get_Q_sample(hkl)
+            Q_sample_3D_true=crystal.get_Q_sample(hkl),
+            optical_axis=crl.optical_axis,
+            magnification=crl.magnification,
+            detector_corners=detector.detector_corners,
+            det_col_count=detector.det_col_count,
+            det_row_count=detector.det_row_count,
+            pixel_size=detector.pixel_size,
+            voxel_size=crystal.voxel_size,
+            bp_Q_sample_3D_true=bp_Q_sample_3D_true,
         )
 
     if plot:
