@@ -1,7 +1,5 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.interpolate import griddata
-from scipy.ndimage import gaussian_filter
 from scipy.spatial.transform import Rotation
 
 from darkmod.projector import GpuProjector
@@ -16,8 +14,8 @@ class Detector(object):
         det_row_count (:obj:`int`): Number of pixels along detector columns.
         det_col_count (:obj:`int`): Number of pixels along detector rows.
         super_sampling (:obj:`int`): Number of super sampling points in each dimension.
-            Defaults to 1, in which case a single ray integral is ompute for each detector
-            pixel.
+            Defaults to 1, in which case a single ray integral is ompute for each
+            detector pixel.
 
     """
 
@@ -49,11 +47,10 @@ class Detector(object):
     def remount_to_crl(self, crl):
         """Set the detector gometry to match the center with the optical CRL axis.
 
-                NOTE: This is only well deifned for wall mount and orthogonal mount geometries.
+            NOTE: This is only well deifned for wall mount and orthogonal mount geometries.
 
-                Args:
-                    crl (obj:`darkmod.crl.CompoundRefractiveLens`): The crl.
-        _
+        Args:
+            crl (obj:`darkmod.crl.CompoundRefractiveLens`): The crl.
         """
         if self._wall_mount:
             self.detector_corners = _get_det_corners_wall_mount(
@@ -342,15 +339,12 @@ def _get_det_corners_orthogonal_mount(
 
 
 if __name__ == "__main__":
-
     data = np.zeros((128, 128, 128), dtype=np.float32)
     pn, wn = 15, 4
 
     data[
         data.shape[0] // 2, data.shape[1] // 2 - wn : data.shape[1] // 2 + wn, wn:-wn
-    ] = np.linspace(
-        1, 4, data.shape[2] - 2 * wn
-    )  # z-axis
+    ] = np.linspace(1, 4, data.shape[2] - 2 * wn)  # z-axis
     for i in range(pn):
         data[
             data.shape[0] // 2,
@@ -360,9 +354,7 @@ if __name__ == "__main__":
 
     data[
         data.shape[0] // 2, wn:-wn, data.shape[2] // 2 - wn : data.shape[2] // 2 + wn
-    ] = np.linspace(4, 7, data.shape[1] - 2 * wn)[
-        :, np.newaxis
-    ]  # y-axis
+    ] = np.linspace(4, 7, data.shape[1] - 2 * wn)[:, np.newaxis]  # y-axis
     for i in range(pn):
         data[
             data.shape[0] // 2,
@@ -388,6 +380,7 @@ if __name__ == "__main__":
     )
 
     from scipy.spatial.transform import Rotation
+
     np.random.seed(0)
     rotvec = np.random.normal(scale=np.radians(25), size=(3,))
     sample_rotation = Rotation.from_rotvec(rotvec).as_matrix()

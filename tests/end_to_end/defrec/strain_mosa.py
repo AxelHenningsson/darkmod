@@ -32,8 +32,17 @@ plt.rcParams["font.size"] = fontsize
 plt.rcParams["xtick.labelsize"] = ticksize
 plt.rcParams["ytick.labelsize"] = ticksize
 
-if __name__ == "__main__":
 
+def main(
+    savedir,
+    reflection,
+    ntheta,
+    nphi,
+    nchi,
+    spatial_artefact=False,
+    detector_noise=False,
+    plot=False,
+):
     number_of_lenses = 69
     lens_space = 1600  # microns
     lens_radius = 50  # microns
@@ -80,53 +89,34 @@ if __name__ == "__main__":
     # reflection 46	-1.0	1.0	3.0	118.00	15.14	20.23	-20.23	15.42	30.83
     # reflection 49	1.0	1.0	3.0	105.14	208.00	-20.23	20.23	15.42	30.83
     #
-    #
 
     # NOTE: The hkl we are probing is NOT alignd with sample-z at this point.
     # this makes thinking about the projection of rotation gradients a bit harder.
 
-    spatial_artefact = False
-    detector_noise = False
-    reflection = 1
-    savedir = "/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves"
-    plot = False
-
     if reflection == 1:  # Reflection #1
         hkl = np.array([-1, -1, 3])
         crystal.goniometer.omega = np.radians(6.431585)
-        thmax = 0.0
-        phimax = 1.4
-        chimax = 2.4
-        ntheta = 5
-        nphi = 5
-        nchi = 5
+        thmax = 0.75
+        phimax = 2.0
+        chimax = 3.0
     elif reflection == 2:  # Reflection #2
         hkl = np.array([-1.0, 1.0, 3.0])
         crystal.goniometer.omega = np.radians(96.431585)
-        thmax = 0.6
-        phimax = 1.4
-        chimax = 2.4
-        ntheta = 5
-        nphi = 5
-        nchi = 5
+        thmax = 0.7
+        phimax = 3.0
+        chimax = 2.0
     elif reflection == 3:  # Reflection #3
         hkl = np.array([1.0, 1.0, 3.0])
         crystal.goniometer.omega = np.radians(186.431585)
-        thmax = 0.6
-        phimax = 1.4
-        chimax = 2.4
-        ntheta = 5
-        nphi = 5
-        nchi = 5
+        thmax = 0.75
+        phimax = 1.2
+        chimax = 2.5
     elif reflection == 4:
-        hkl = np.array([1.0, -1.0, 3.0])
-        crystal.goniometer.omega = np.radians(276.431585)
-        thmax = 0.6
-        phimax = 1.4
-        chimax = 2.4
-        ntheta = 5
-        nphi = 5
-        nchi = 5
+        hkl = np.array([-1.0, 1.0, 3.0])
+        crystal.goniometer.omega = np.radians(96.431585)
+        thmax = 0.7
+        phimax = 3.0
+        chimax = 2.0
 
     eta = np.radians(20.232593)
     theta = np.radians(15.416837)
@@ -134,8 +124,8 @@ if __name__ == "__main__":
     crl.goto(theta, eta)
 
     # Discretize the crystal
-    xg = np.linspace(-1, 1, 33*4 + 1)  # microns
-    yg = np.linspace(-1, 1, 33*4 + 1)  # microns
+    xg = np.linspace(-1, 1, 33 * 4 + 1)  # microns
+    yg = np.linspace(-1, 1, 33 * 4 + 1)  # microns
     # zg = np.linspace(-1, 1, 67)  # microns
     dx = 4 * (xg[1] - xg[0])
     zg = np.array([0])
@@ -143,7 +133,10 @@ if __name__ == "__main__":
 
     defgrad = straight_edge_dislocation((X, Y, Z), x0=[[0, 0, 0]])
 
-    theta_values = np.linspace(-np.abs(thmax), thmax, ntheta) * 1e-3
+    if ntheta == 1:
+        theta_values = np.array([0.0])
+    else:
+        theta_values = np.linspace(-np.abs(thmax), thmax, ntheta) * 1e-3
     phi_values = np.linspace(-np.abs(phimax), phimax, nphi) * 1e-3
     chi_values = np.linspace(-np.abs(chimax), chimax, nchi) * 1e-3
 
@@ -200,8 +193,10 @@ if __name__ == "__main__":
 
     # beam = GaussianLineBeam(z_std=0.1, energy=energy)
     beam = HeavysideBeam(y_width=1e8, z_width=1e8, energy=energy)
-
-    dth = theta_values[1] - theta_values[0]
+    if len(theta_values) == 1:
+        dth = 0
+    else:
+        dth = theta_values[1] - theta_values[0]
     dphi = phi_values[1] - phi_values[0]
     dchi = chi_values[1] - chi_values[0]
 
@@ -321,6 +316,17 @@ if __name__ == "__main__":
             crystal.goniometer.R,
         )
 
+    bp_Q_sample_3D_rec = np.zeros((*X.shape, 3))
+    for i in range(3):
+        bp_Q_sample_3D_rec[..., i] = detector.backpropagate(
+            Q_rec[..., i],
+            X.shape,
+            crystal.voxel_size,
+            crl.optical_axis,
+            crl.magnification,
+            crystal.goniometer.R,
+        )
+
     if savedir is not None:
         np.savez(
             os.path.join(savedir, "reflection_" + str(reflection)),
@@ -352,6 +358,7 @@ if __name__ == "__main__":
             pixel_size=detector.pixel_size,
             voxel_size=crystal.voxel_size,
             bp_Q_sample_3D_true=bp_Q_sample_3D_true,
+            bp_Q_sample_3D_rec=bp_Q_sample_3D_rec,
         )
 
     if plot:
@@ -456,3 +463,18 @@ if __name__ == "__main__":
         plt.tight_layout()
 
         plt.show()
+
+
+if __name__ == "__main__":
+    for reflection in range(1, 5):
+        print("\n\n######## REFLECTION " + str(reflection) + " ##########")
+        main(
+            savedir="/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves/simul_mosa",
+            reflection=reflection,
+            ntheta=1,
+            nphi=81,
+            nchi=81,
+            spatial_artefact=False,
+            detector_noise=False,
+            plot=False,
+        )

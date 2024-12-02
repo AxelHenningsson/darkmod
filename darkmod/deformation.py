@@ -1,26 +1,50 @@
 import numpy as np
 from scipy.spatial.transform import Rotation
 
+import darkmod
 
-def straight_edge_dislocation(coord, x0=[[0, 0, 0]], v=0.334, b=2.86 * 1e-4):
-    """Calculate the deformation gradient for an edge dislocation.
+
+def straight_edge_dislocation(
+    coord,
+    x0=[[0, 0, 0]],
+    v=0.334,
+    b=2.86 * np.array([1, -1, 0]) * 1e-4,
+    n=np.array([1, 1, -1]),
+    t=np.array([1, 1, 2]),
+):
+    """Calculate the deformation gradient field around a set of edge dislocations.
 
     Computes the deformation field caused by edge dislocations
-    located at a series of points `x0` in the crystal.
+    located at a series of points `x0` in the crystal. Input
+    coordinates are in the grain system as specified in the following
+    citation:
+
+    citation:
+        J. Appl. Cryst. (2021). 54, 1555-1571
+        H. F. Poulsen et al.
+        Geometrical optics formalism to model contrast in DFXM
+
+    NOTE: this function operates under the fault asssumption of units of microns.
 
     Args:
-        X, Y (:obj:`np.ndarray`): 2D coordinate arrays for the crystal points.
-        x0 (:obj:`list` of lists): Dislocation positions in the crystal, default is [[0, 0, 0]].
-        v (:obj:`float`): Poisson's ratio, default is 0.3.
-        b (:obj:`float`): Burgers vector magnitude, default is 2.86e-4.
+        coord (:obj:`iterable` of :obj:`np.ndarray`): x,y,z coordinate arrays for the crystal points.
+        x0 (:obj:`list` of lists): Dislocation line positions in the crystal, defaults to [[0, 0, 0]].
+            in grain coordinates. These are the line transaltions from the origin.
+        v (:obj:`float`): Poisson's ratio, defaults to 0.3.
+        b (:obj:`np.ndarray`): Burgers vector, shape=(3,), defaults to 2.86e-4*[1, -1, 0].
+        n (:obj:`np.ndarray`): Spli plane normal, shape=(3,) defaults to [1, 1, -1].
+        t (:obj:`np.ndarray`): Line direction, shape=(3,), defaults to [1, 1, 2].
 
     Returns:
-        :obj:`np.ndarray`: Deformation gradient tensor F, shape=(m, n, 3, 3).
+        :obj:`np.ndarray`: Deformation gradient tensor F, shape=(m, n, 0, 3, 3). x is along rows, y along columns
+            and z along axis=2.
     """
 
     # dislocation system basis matrix
-    U_d = np.array([[1, -1, 0], [1, 1, -1], [1, 1, 2]]).T
+    U_d = np.array([b, n, t]).T
     U_d = U_d / np.linalg.norm(U_d, axis=0)
+    bmag = np.linalg.norm(b)
+    assert np.allclose(U_d.T @ U_d, np.eye(3)), "b,n and t must form a Cartesian basis."
 
     # dislocation system voxel cooridnates.
     X, Y, Z = U_d.T @ np.array([c.flatten() for c in coord])
@@ -31,14 +55,13 @@ def straight_edge_dislocation(coord, x0=[[0, 0, 0]], v=0.334, b=2.86 * 1e-4):
         F_d[:, i, i] = 1
 
     for i in range(len(x0)):
-
         # dislocation position in dislocation frame.
         x, y, _ = U_d.T @ np.array(x0[i])
 
         # compute local F value
         Ys, Xs = (X - x), (Y - y)
         x2, y2 = Ys * Ys, Xs * Xs
-        a_1 = b / (4 * np.pi * (1 - v))
+        a_1 = bmag / (4 * np.pi * (1 - v))
 
         a_2 = x2 + y2
         a_3 = 1 / ((a_2 * a_2) + 1e-8)
@@ -48,7 +71,7 @@ def straight_edge_dislocation(coord, x0=[[0, 0, 0]], v=0.334, b=2.86 * 1e-4):
         F_d[:, 1, 0] += (-Xs * (x2 + 3 * y2 + a_4)) * a_3 * a_1
         F_d[:, 1, 1] += (Ys * (x2 - y2 + a_4)) * a_3 * a_1
 
-    # Map F back to sample frame.
+    # Map F back to grain frame.
     F_g = (U_d @ F_d @ U_d.T).reshape((*coord[0].shape, 3, 3))
 
     return F_g
@@ -62,9 +85,9 @@ def edge_dislocation(X, Y, x0=[[0, 0]], v=0.3, b=2.86 * 1e-4):
 
     Args:
         X, Y (:obj:`np.ndarray`): 2D coordinate arrays for the crystal points.
-        x0 (:obj:`list` of lists): Dislocation positions in the crystal, default is [[0, 0]].
-        v (:obj:`float`): Poisson's ratio, default is 0.3.
-        b (:obj:`float`): Burgers vector magnitude, default is 2.86e-4.
+        x0 (:obj:`list` of lists): Dislocation positions in the crystal, defaults to [[0, 0]].
+        v (:obj:`float`): Poisson's ratio, defaults to 0.3.
+        b (:obj:`float`): Burgers vector magnitude, defaults to 2.86e-4.
 
     Returns:
         :obj:`np.ndarray`: Deformation gradient tensor F, shape=(m, n, 3, 3).
@@ -73,11 +96,10 @@ def edge_dislocation(X, Y, x0=[[0, 0]], v=0.3, b=2.86 * 1e-4):
     a_1 = b / (4 * np.pi * (1 - v))
 
     for x, y in x0:
-
         Ys, Xs = (X - x), (Y - y)
         x2, y2 = Ys * Ys, Xs * Xs
         a_2 = x2 + y2
-        a_3 = 1 / ((a_2 * a_2))
+        a_3 = 1 / (a_2 * a_2)
         a_4 = -2 * v * a_2
 
         F[:, :, 0, 0] += (-Ys * (3 * x2 + y2 + a_4)) * a_3
@@ -224,16 +246,98 @@ def simple_shear(shape, shear_magnitude=0.003):
     return F
 
 
-if __name__ == "__main__":
+def maxwell_stress(coord):
+    # A = x**3 * y**2 * z**2
+    # B = x**2 * y**2 * z**2
+    # C = x**2 * y**2 * z**2
 
-    xg = np.linspace(-1, 1, 128)
+    x, y, z = coord
+
+    dBdx = 6 * x * y**2 * z**2
+    dBdz = 2 * x**3 * y**2
+
+    dAdy = 2 * x**3 * z**2
+    dAdz = 2 * x**3 * y**2
+
+    dCdx = 6 * x * y**2 * z**2
+    dCdy = 2 * x**3 * z**2
+
+    dAdyz = 2 * y * 2 * z * x**3
+    dBdzx = 3 * x**2 * 2 * z * y * y
+    dCdxy = 3 * x**2 * 2 * y * z * z
+
+    sigma = np.zeros((*x.shape, 3, 3))
+    sigma[..., 0, 0] = dBdz + dCdy
+    sigma[..., 1, 1] = dCdx + dAdz
+    sigma[..., 2, 2] = dAdy + dBdx
+    sigma[..., 1, 2] = sigma[..., 2, 1] = -dAdyz
+    sigma[..., 0, 2] = sigma[..., 2, 0] = -dBdzx
+    sigma[..., 0, 1] = sigma[..., 1, 0] = -dCdxy
+
+    return sigma * 1e9
+
+
+def cantilevered_beam(coord, l, v, E):
+    x, y, z = coord
+
+    nu = v
+
+    h = l / 2.0
+    t = (6 / 20.0) * l
+    Pz = 1000
+    Py = 2000
+    Iyy = t * h * h * h / 12.0
+    Izz = t * h * h * h / 12.0
+
+    eps = np.zeros((*coord[0].shape, 6))
+    eps[..., 0] = Py * (l - x) * y / E / Iyy + Pz * (l - x) * z / E / Izz
+    eps[..., 1] = (-v * Py * (l - x) * y / E / Iyy) - (v * Pz * (l - x) * z / E / Izz)
+    eps[..., 2] = (-v * Py * (l - x) * y / E / Iyy) - (v * Pz * (l - x) * z / E / Izz)
+    eps[..., 5] = 2 * (-(1 + v) / E * Py * ((h**2 / 4.0) - y**2) / 2 / Iyy)
+    eps[..., 4] = 2 * (-(1 + v) / E * Pz * ((t**2 / 4.0) - z**2) / 2 / Izz)
+    eps[..., 3] = 0
+
+    eps = eps.reshape(-1, 6).T
+
+    D = darkmod.transforms.elasticity_matrix(E, v)
+
+    stress_voigt = (D @ eps).T.reshape((*coord[0].shape, 6)).T
+    sigma = np.zeros((*x.shape, 3, 3))
+    sigma[..., 0, 0] = stress_voigt[0]
+    sigma[..., 1, 1] = stress_voigt[1]
+    sigma[..., 2, 2] = stress_voigt[2]
+    sigma[..., 1, 2] = sigma[..., 2, 1] = stress_voigt[3]
+    sigma[..., 0, 2] = sigma[..., 2, 0] = stress_voigt[4]
+    sigma[..., 0, 1] = sigma[..., 1, 0] = stress_voigt[5]
+
+    # sigma = np.zeros((*x.shape, 3, 3))
+    # sigma[..., 0, 0] = (y + z) ** 2
+    # sigma[..., 1, 1] = x + z
+    # sigma[..., 2, 2] = np.exp(x + y * 0.2)
+    # sigma[..., 1, 2] = sigma[..., 2, 1] = np.sqrt(x + 1e-4) + x * x
+    # sigma[..., 0, 2] = sigma[..., 2, 0] = y
+    # sigma[..., 0, 1] = sigma[..., 1, 0] = np.log(z) * z
+
+    return sigma
+
+
+if __name__ == "__main__":
+    E, v = 200 * 1e9, 0.28
+
+    l = 20 * 1e-3
+
+    xg = np.linspace(0, l, 64)
+    dx = xg[1] - xg[0]
     coord = np.meshgrid(xg, xg, xg, indexing="ij")
-    defgrad = straight_edge_dislocation(coord, x0=[[0,0,0]])
+    defgrad = straight_edge_dislocation(coord, x0=[[0, 0, 0]], v=0.334)
+
     beta = defgrad.copy()
     for i in range(3):
         beta[..., i, i] -= 1
 
     import matplotlib.pyplot as plt
+
+    from darkmod.transforms import divergence, elasticity_matrix
 
     fontsize = 16  # General font size for all text
     ticksize = 16  # tick size
@@ -241,34 +345,62 @@ if __name__ == "__main__":
     plt.rcParams["xtick.labelsize"] = ticksize
     plt.rcParams["ytick.labelsize"] = ticksize
 
-    # from matplotlib.colors import LinearSegmentedColormap
+    D = elasticity_matrix(E, v)
 
-    # color_min    = "#4203ff"
-    # color_center = "black"
-    # color_max    = "#ff0342"
-    # cmap = LinearSegmentedColormap.from_list(
-    #     "cmap_name",
-    #     [color_min, color_center, color_max]
+    print(D)
+
+    # elasticity_matrix = np.array(
+    #     [
+    #         [104, 73, 73, 0, 0, 0],
+    #         [73, 104, 73, 0, 0, 0],
+    #         [73, 73, 104, 0, 0, 0],
+    #         [0, 0, 0, 32, 0, 0],
+    #         [0, 0, 0, 0, 32, 0],
+    #         [0, 0, 0, 0, 0, 32],
+    #     ]
     # )
 
+    fontsize = 32  # General font size for all text
+    ticksize = 32  # tick size
+    plt.rcParams["font.size"] = fontsize
+    plt.rcParams["xtick.labelsize"] = ticksize
+    plt.rcParams["ytick.labelsize"] = ticksize
+
+    stress = cantilevered_beam(coord, l, v, E)
+
+    stress = maxwell_stress(coord)
+
+    # stress = beta_to_stress(beta, D)
+
+    residual = divergence(stress, (dx, dx, dx))
+
     plt.style.use("dark_background")
-    fig, ax = plt.subplots(3, 3, figsize=(15, 9), sharex=True, sharey=True)
-    fig.suptitle("Elastic distortion ($\\beta$) field around dislocations")
+    fig, ax = plt.subplots(1, 3, figsize=(22, 12), sharex=True, sharey=True)
+    fig.suptitle("Stress residual ($\\Delta r$)")
     for i in range(3):
-        for j in range(3):
-            vmax = np.max(np.abs(beta[:, :, coord[0].shape[2] // 2, i, j]))*0.1
-            vmin = -vmax
-            im = ax[i, j].imshow(
-                beta[:, :, coord[0].shape[2] // 2, i, j],
-                vmin=vmin,
-                vmax=vmax,
-                cmap="coolwarm",
-            )
-            ax[i, j].annotate(r'$\boldsymbol{F}_{'+str(i+1)+str(j+1)+r'}$', (6,14), c='black')
-            fig.colorbar(im, ax=ax[i, j], fraction=0.046, pad=0.04)
-            if i == 2 :
-                ax[i, j].set_xlabel("y [voxels]")
-            if j == 0 :
-                ax[i, j].set_ylabel("x [voxels]")
+        _s = residual[len(xg) // 2, ..., i]
+
+        vmax = np.nanmax(np.abs(stress[..., 0, i, :]))
+        vmin = -vmax
+        im = ax[i].imshow(
+            _s,
+            vmin=vmin,
+            vmax=vmax,
+            cmap="seismic",
+        )
+        ax[i].annotate(
+            r"$\boldsymbol{\Delta r}_{" + str(i + 1) + r"}$",
+            (15, 25),
+            c="black",
+        )
+        fig.colorbar(im, ax=ax[i], fraction=0.046, pad=0.04)
+        ax[i].set_xlabel("y [pixels]")
+        if i == 0:
+            ax[i].set_ylabel("x [pixels]")
     plt.tight_layout()
+    for a in ax.flatten():
+        for spine in a.spines.values():
+            spine.set_visible(False)
+    plt.show()
+    plt.show()
     plt.show()

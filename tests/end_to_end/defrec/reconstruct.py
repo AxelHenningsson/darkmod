@@ -1,17 +1,18 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import os
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from darkmod.transforms import beta_to_stress, curl, divergence
 from darkmod.utils import crop
-import cProfile
-import pstats
-import time
 
 plt.style.use("dark_background")
-fontsize = 32  # General font size for all text
-ticksize = 32  # tick size
+fontsize = 24  # General font size for all text
+ticksize = 24  # tick size
 plt.rcParams["font.size"] = fontsize
 plt.rcParams["xtick.labelsize"] = ticksize
 plt.rcParams["ytick.labelsize"] = ticksize
+
 
 def _lsq(Q, G_0, mask):
     """Solve many independent LSQ problems over a 2D field.
@@ -59,15 +60,13 @@ def _lsq(Q, G_0, mask):
 
 
 def deformation(diffraction_vectors, hkl, omega, UB_reference):
-
     # The measured Q-vectors as a m,n,3,3 array where Q[i,j,:,k] is a diffraction vectord
     Q = np.transpose(np.stack(diffraction_vectors, axis=2), axes=(0, 1, 3, 2))
 
     m, n, _, k = Q.shape
     mask = ~np.any(np.isnan(Q.reshape(m * n, 3 * k)), axis=1).reshape(m, n)
 
-    if 1:
-
+    if 0:
         fig, ax = plt.subplots(3, 3, figsize=(22, 16), sharex=True, sharey=True)
         fig.suptitle(
             r"Backpropagated Reflections (sample coord)",
@@ -115,9 +114,8 @@ def deformation(diffraction_vectors, hkl, omega, UB_reference):
 
 
 if __name__ == "__main__":
-
     # Path to the directory in which reflections are stored
-    savedir = "/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves"
+    savedir = "/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves/simul1"
 
     # we store the 3 reflections in an array
     data = np.empty((4,), dtype=object)
@@ -145,9 +143,8 @@ if __name__ == "__main__":
     # ]
 
     diffraction_vectors = [
-       reflection["bp_Q_sample_3D_true"][:, :, 0, :] for reflection in data
+        reflection["bp_Q_sample_3D_rec"][:, :, 0, :] for reflection in data
     ]
-
 
     # Run the reconstructor to get back the deformation gradient tensor field
     defgrad = deformation(
@@ -165,6 +162,92 @@ if __name__ == "__main__":
         beta[..., i, i] -= 1
         beta_true_3D[..., i, i] -= 1
 
+    _b = np.concatenate((beta_true_3D, beta_true_3D, beta_true_3D), axis=2)
+    dx = dy = dz = data[0]["voxel_size"]
+    curl_beta_true_3D = curl(_b, (dx, dy, dz))
+
+    elasticity_matrix = np.array(
+        [
+            [104, 73, 73, 0, 0, 0],
+            [73, 104, 73, 0, 0, 0],
+            [73, 73, 104, 0, 0, 0],
+            [0, 0, 0, 32, 0, 0],
+            [0, 0, 0, 0, 32, 0],
+            [0, 0, 0, 0, 0, 32],
+        ]
+    )  # units of GPa
+
+    B_0 = data[0]["B_0"]
+    U_0 = data[0]["U_0"]
+    C_c = np.linalg.inv(B_0).T
+    E = np.column_stack((C_c[:, 0], np.cross(C_c[:, 2], C_c[:, 0]), C_c[:, 2]))
+    E /= np.linalg.norm(E, axis=0)
+
+    R = U_0 @ E
+
+    stress = beta_to_stress(beta[..., np.newaxis, :, :], elasticity_matrix, rotation=R)
+
+    _b = np.concatenate((stress, stress, stress), axis=2)
+    residual = divergence(_b, (dx, dy, dz))
+
+    plt.style.use("dark_background")
+    fig, ax = plt.subplots(1, 3, figsize=(22, 16), sharex=True, sharey=True)
+    fig.suptitle("Stress residual ($\\Delta r$)")
+    for i in range(3):
+        _s = crop(residual[..., 1, i], mask)
+
+        vmax = np.nanmax(np.abs(stress[..., 0, i, :]))
+        vmin = -vmax
+        im = ax[i].imshow(
+            _s,
+            vmin=vmin,
+            vmax=vmax,
+            cmap="seismic",
+        )
+        ax[i].annotate(
+            r"$\boldsymbol{\Delta r}_{" + str(i + 1) + r"}$",
+            (15, 25),
+            c="black",
+        )
+        fig.colorbar(im, ax=ax[i], fraction=0.046, pad=0.04)
+        ax[i].set_xlabel("y [pixels]")
+        if i == 0:
+            ax[i].set_ylabel("x [pixels]")
+    plt.tight_layout()
+    for a in ax.flatten():
+        for spine in a.spines.values():
+            spine.set_visible(False)
+
+    plt.style.use("dark_background")
+    fig, ax = plt.subplots(3, 3, figsize=(22, 16), sharex=True, sharey=True)
+    fig.suptitle("Reconstructed stress ($\\sigma$)")
+    for i in range(3):
+        for j in range(3):
+            _s = crop(stress[:, :, 0, i, j], mask)
+
+            vmax = np.nanmax(np.abs(stress[:, :, 0, i, j])) * 0.5
+            vmin = -vmax
+            im = ax[i, j].imshow(
+                _s,
+                vmin=vmin,
+                vmax=vmax,
+                cmap="seismic",
+            )
+            ax[i, j].annotate(
+                r"$\boldsymbol{\sigma}_{" + str(i + 1) + str(j + 1) + r"}$",
+                (15, 25),
+                c="black",
+            )
+            fig.colorbar(im, ax=ax[i, j], fraction=0.046, pad=0.04)
+            if i == 2:
+                ax[i, j].set_xlabel("y [pixels]")
+            if j == 0:
+                ax[i, j].set_ylabel("x [pixels]")
+    plt.tight_layout()
+    for a in ax.flatten():
+        for spine in a.spines.values():
+            spine.set_visible(False)
+
     plt.style.use("dark_background")
     fig, ax = plt.subplots(3, 3, figsize=(22, 16), sharex=True, sharey=True)
     fig.suptitle("Reconstructed elastic distortion ($\\beta$) field around dislocation")
@@ -172,13 +255,7 @@ if __name__ == "__main__":
         for j in range(3):
             _s = crop(beta[:, :, i, j], mask)
 
-            # detector flips
-            # _s = np.flipud(np.fliplr(_s))
-
-            # make x along rows and y along cols
-            # _s = np.fliplr(_s)
-
-            vmax = np.nanmax(np.abs(beta_true_3D[:, :, 0, i, j])) * 0.75
+            vmax = np.nanmax(np.abs(beta_true_3D[:, :, 0, i, j])) * 0.25
             vmin = -vmax
             im = ax[i, j].imshow(
                 _s,
@@ -188,7 +265,7 @@ if __name__ == "__main__":
             )
             ax[i, j].annotate(
                 r"$\boldsymbol{\beta}_{" + str(i + 1) + str(j + 1) + r"}$",
-                (5, 15),
+                (15, 25),
                 c="black",
             )
             fig.colorbar(im, ax=ax[i, j], fraction=0.046, pad=0.04)
@@ -201,6 +278,7 @@ if __name__ == "__main__":
         for spine in a.spines.values():
             spine.set_visible(False)
     plt.style.use("dark_background")
+
     fig, ax = plt.subplots(3, 3, figsize=(22, 16), sharex=True, sharey=True)
     fig.suptitle(
         "Real space true elastic distortion ($\\beta$) field around dislocation"
@@ -210,7 +288,7 @@ if __name__ == "__main__":
             # _s = crop(beta[:, :, i, j], mask)
             _s = beta_true_3D[:, :, 0, i, j]
 
-            vmax = np.nanmax(np.abs(_s)) * 0.75
+            vmax = np.nanmax(np.abs(_s)) * 0.25
             vmin = -vmax
             im = ax[i, j].imshow(
                 _s,
@@ -220,7 +298,7 @@ if __name__ == "__main__":
             )
             ax[i, j].annotate(
                 r"$\boldsymbol{\beta}_{" + str(i + 1) + str(j + 1) + r"}$",
-                (5, 15),
+                (15, 25),
                 c="black",
             )
             fig.colorbar(im, ax=ax[i, j], fraction=0.046, pad=0.04)
@@ -232,4 +310,75 @@ if __name__ == "__main__":
     for a in ax.flatten():
         for spine in a.spines.values():
             spine.set_visible(False)
+
+    fig, ax = plt.subplots(3, 3, figsize=(22, 16), sharex=True, sharey=True)
+
+    fig.suptitle(
+        "Real space true curl of elastic distortion ($\\nabla x \\beta$) [x 1e6]"
+    )
+    for i in range(3):
+        for j in range(3):
+            # _s = crop(beta[:, :, i, j], mask)
+            _s = curl_beta_true_3D[:, :, 0, i, j]
+
+            vmax = np.nanmax(np.abs(_s)) * 0.1
+            vmin = -vmax
+            im = ax[i, j].imshow(
+                _s,
+                vmin=vmin,
+                vmax=vmax,
+                cmap="jet",
+            )
+            ax[i, j].annotate(
+                r"$\boldsymbol{\alpha}_{" + str(i + 1) + str(j + 1) + r"}$",
+                (15, 25),
+                c="black",
+            )
+            fig.colorbar(im, ax=ax[i, j], fraction=0.046, pad=0.04)
+            if i == 2:
+                ax[i, j].set_xlabel("y [voxels]")
+            if j == 0:
+                ax[i, j].set_ylabel("x [voxels]")
+    plt.tight_layout()
+    for a in ax.flatten():
+        for spine in a.spines.values():
+            spine.set_visible(False)
+
+    fig, ax = plt.subplots(3, 3, figsize=(22, 16), sharex=True, sharey=True)
+    beta = beta[:, :, np.newaxis, :, :]
+    _b = np.concatenate((beta, beta, beta), axis=2)
+    dx = dy = dz = data[0]["voxel_size"]
+    curl_beta_rec_3D = curl(_b, (dx, dy, dz))
+
+    fig.suptitle(
+        "Reconstructed curl of elastic distortion ($\\nabla x \\beta$) [x 1e6]"
+    )
+    for i in range(3):
+        for j in range(3):
+            # _s = crop(beta[:, :, i, j], mask)
+            _s = curl_beta_rec_3D[:, :, 0, i, j]
+
+            vmax = np.nanmax(np.abs(curl_beta_true_3D[:, :, 0, i, j])) * 0.1
+            vmin = -vmax
+            im = ax[i, j].imshow(
+                _s,
+                vmin=vmin,
+                vmax=vmax,
+                cmap="jet",
+            )
+            ax[i, j].annotate(
+                r"$\boldsymbol{\alpha}_{" + str(i + 1) + str(j + 1) + r"}$",
+                (15, 25),
+                c="black",
+            )
+            fig.colorbar(im, ax=ax[i, j], fraction=0.046, pad=0.04)
+            if i == 2:
+                ax[i, j].set_xlabel("y [voxels]")
+            if j == 0:
+                ax[i, j].set_ylabel("x [voxels]")
+    plt.tight_layout()
+    for a in ax.flatten():
+        for spine in a.spines.values():
+            spine.set_visible(False)
+
     plt.show()
