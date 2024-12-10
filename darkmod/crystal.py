@@ -39,12 +39,14 @@ class Crystal(object):
             orientation (:obj:`numpy array`): Reference orientation matrix (undeformed state), shape=(3,3).
         """
         self.goniometer = Goniometer()
-        self.U = orientation
+        self._U = orientation
         self.unit_cell = unit_cell
-        self.B = laue.get_b_matrix(unit_cell)
+        self._B = laue.get_b_matrix(unit_cell)
 
         self._x = None
         self._F = None
+
+        self._cache = {}
 
     def discretize(self, X, Y, Z, defgrad):
         """Discretize the crystal over a unifrom grid.
@@ -80,7 +82,7 @@ class Crystal(object):
             dz = Z[0, 0, 1] - Z[0, 0, 0]
         else:
             dz = dx
-        assert dx == dy and dx == dz, "voxels must be cubic"
+        assert np.allclose(dx, dy) and np.allclose(dx, dz), "voxels must be cubic"
         self.voxel_size = dx
 
     @property
@@ -141,7 +143,7 @@ class Crystal(object):
             self._x[2, :] = value.reshape(self._flat_scalar_shape)
 
     @property
-    def green_lagdefgradrange_strain(self):
+    def green_lagrange_strain(self):
         """The crystal Green-Lagrange strain tensor in sample coordinates.
 
         Returns:
@@ -189,6 +191,26 @@ class Crystal(object):
             raise ValueError("Please use discretize() to instantiate the field.")
         else:
             self._F = value.reshape(self._flat_tensor_shape)
+            self._FiT = np.transpose(np.linalg.inv(self._F), axes=(0, 2, 1))
+            self._cache = {}
+
+    @property
+    def U(self):
+        return self._U
+
+    @U.setter
+    def U(self, value):
+        self._U = value
+        self._cache = {}
+
+    @property
+    def B(self):
+        return self._B
+
+    @B.setter
+    def B(self, value):
+        self._B = value
+        self._cache = {}
 
     @property
     def UB_0(self):
@@ -292,8 +314,11 @@ class Crystal(object):
     def _get_Q_sample_flat(self, hkl):
         if self._F is None:
             raise ValueError("Please use discretize() to instantiate the field.")
+        elif "Q_sample_flat" in self._cache:
+            return self._cache["Q_sample_flat"]
         else:
-            return self._FiT @ self._get_Q_0_sample_flat(hkl)
+            self._cache["Q_sample_flat"] = self._FiT @ self._get_Q_0_sample_flat(hkl)
+            return self._cache["Q_sample_flat"]
 
     def _get_Q_0_sample_flat(self, hkl):
         return self.U @ (self.B @ hkl)
@@ -318,7 +343,6 @@ class Crystal(object):
         if np.arccos(np.dot(nhat, axis)) > np.radians(
             1e-9
         ):  # already aligned within a nano degree
-
             if transformation_hkl is not None:
                 primary_rotation_vector = self.goniometer.R @ (
                     self.U @ self.B @ transformation_hkl
@@ -341,7 +365,7 @@ class Crystal(object):
             angle = np.arccos(nhat @ axis)
 
             rotation = Rotation.from_rotvec(primary_rotation_vector * angle)
-            self.goniometer.goto(rotation=rotation * self.goniometer.R.scipy_rotation)
+            self.goniometer.goto(rotation=rotation.as_matrix() @ self.goniometer.R)
 
     # def align(self, hkl, axis):
     #     """
@@ -494,7 +518,9 @@ class Crystal(object):
         """
         Q_lab_flat = self.goniometer.R @ self._get_Q_sample_flat(hkl).T
 
+        # probably should be a function....
         x_lab = self.goniometer.R @ self._x
+        x_lab += self.translation[:, np.newaxis]
 
         if spatial_artefact:
             angular_crl_shifts = crl.get_angular_shifts(x_lab)
@@ -513,6 +539,7 @@ class Crystal(object):
             crl.optical_axis,
             crl.magnification,
             self.goniometer.R,
+            self.goniometer.translation,
         )
 
         return image
@@ -542,15 +569,13 @@ class Crystal(object):
 
 
 if __name__ == "__main__":
-
     from darkmod import laue
     from darkmod.beam import GaussianLineBeam
     from darkmod.crl import CompundRefractiveLens
     from darkmod.crystal import Crystal
     from darkmod.deformation import linear_gradient
     from darkmod.detector import Detector
-    from darkmod.laue import keV_to_angstrom
-    from darkmod.resolution import DualKentGauss, PentaGauss
+    from darkmod.resolution import PentaGauss
 
     number_of_lenses = 50
     lens_space = 2000  # microns

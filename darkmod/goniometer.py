@@ -1,9 +1,7 @@
 import numpy as np
-import pandas as pd
 from scipy.spatial.transform import Rotation
 
-from darkmod import laue
-from darkmod.transforms import HighPrecisionRotation
+# from darkmod.transforms import HighPrecisionRotation
 
 
 class Goniometer:
@@ -12,7 +10,8 @@ class Goniometer:
 
     Attributes:
         phi, chi, mu, omega (:obj:`float`): Goniometer motor settings in radians. Starts at zero.
-
+        translation (:obj:`numpy.ndarray`): Goniometer translation in lab coordinates. Starts at zero.
+            the translation is in units of microns.
     """
 
     def __init__(self):
@@ -20,6 +19,8 @@ class Goniometer:
         Initialize DFXM goniometer.
         """
         self.phi = self.chi = self.mu = self.omega = 0
+
+        self.translation = np.zeros((3,))
 
         self._xhat_lab = np.array([1.0, 0.0, 0.0])
         self._yhat_lab = np.array([0.0, 1.0, 0.0])
@@ -94,7 +95,7 @@ class Goniometer:
         """
         Ry_phi = Rotation.from_rotvec(self._yhat_lab * phi)
         Rx_chi = Rotation.from_rotvec(self._xhat_lab * chi)
-        return HighPrecisionRotation(Rx_chi * Ry_phi)
+        return (Rx_chi * Ry_phi).as_matrix()
 
     def get_R_phi(self, phi):
         """Construct a rotation object for an input phi.
@@ -106,7 +107,7 @@ class Goniometer:
             (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer phi rotation object.
         """
         Ry_phi = Rotation.from_rotvec(self._yhat_lab * phi)
-        return HighPrecisionRotation(Ry_phi)
+        return (Ry_phi).as_matrix()
 
     def get_R_chi(self, chi):
         """Construct a rotation object for an input chi.
@@ -118,7 +119,7 @@ class Goniometer:
             (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer chi rotation object.
         """
         Rx_chi = Rotation.from_rotvec(self._xhat_lab * chi)
-        return HighPrecisionRotation(Rx_chi)
+        return (Rx_chi).as_matrix()
 
     def get_R_omega(self, omega):
         """Construct a rotation object for an input omega.
@@ -130,7 +131,7 @@ class Goniometer:
             (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer omega rotation object.
         """
         Rz_omega = Rotation.from_rotvec(self._zhat_lab * omega)
-        return HighPrecisionRotation(Rz_omega)
+        return (Rz_omega).as_matrix()
 
     def get_R_mu(self, mu):
         """Construct a rotation object for an input mu.
@@ -142,7 +143,7 @@ class Goniometer:
             (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer mu rotation object.
         """
         Ry_mu = Rotation.from_rotvec(self._yhat_lab * mu)
-        return HighPrecisionRotation(Ry_mu)
+        return (Ry_mu).as_matrix()
 
     @property
     def R(self):
@@ -160,7 +161,7 @@ class Goniometer:
         Rx_chi = Rotation.from_rotvec(self._xhat_lab * self.chi)
         Rz_omega = Rotation.from_rotvec(self._zhat_lab * self.omega)
         Ry_mu = Rotation.from_rotvec(self._yhat_lab * self.mu)
-        R_goni = HighPrecisionRotation(Ry_mu * Rz_omega * Rx_chi * Ry_phi)
+        R_goni = (Ry_mu * Rz_omega * Rx_chi * Ry_phi).as_matrix()
         return R_goni
 
     def info(self):

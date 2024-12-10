@@ -96,7 +96,6 @@ def deformation(diffraction_vectors, hkl, omega, UB_reference):
                 spine.set_visible(False)
         plt.tight_layout()
         plt.show()
-    # TODO: Some rotation of the images needed even if Q is sample space
     # least squares reconstruction
     # Reference diffraction vectors: G_0 = U_0 @ B_0 @ Hmatrix
     # The measurement are a stack of Q: y = (U @ B) @ Hmatrix

@@ -16,7 +16,7 @@ plt.rcParams["ytick.labelsize"] = ticksize
 if __name__ == "__main__":
 
     # Path to the directory in which reflections are stored
-    savedir = "/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves"
+    savedir = "/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves/simul1"
 
     # we store the 3 reflections in an array
     data = np.empty((4,), dtype=object)

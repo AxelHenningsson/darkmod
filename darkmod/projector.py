@@ -1,6 +1,6 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import astra
+import matplotlib.pyplot as plt
+import numpy as np
 from scipy.spatial.transform import Rotation
 
 
@@ -31,7 +31,6 @@ class GpuProjector(object):
         det_col_count,
         super_sampling,
     ):
-
         assert super_sampling > 0, "The super sampling must be positive"
         assert isinstance(super_sampling, int), "The super sampling must be integer"
         assert (
@@ -45,7 +44,14 @@ class GpuProjector(object):
         self.det_col_count = det_col_count
         self.super_sampling = super_sampling
 
-    def __call__(self, voxel_volume, voxel_size, ray_direction, detector_corners):
+    def __call__(
+        self,
+        voxel_volume,
+        voxel_size,
+        ray_direction,
+        detector_corners,
+        translation=np.zeros((3,)),
+    ):
         """Project the voxel volume along the optical axis.
 
         The rays are parallel to the optical axis. This uses astra-toolbox to compute
@@ -66,6 +72,7 @@ class GpuProjector(object):
                 from the crl opening). d1 is to the left of d0 and d2 above d0. d0,d1,d2 is arranged counter
                 clockwise. The vector from d0 to d1 defined the negative columns of the detector and the
                 vector from d0 to d2 defines the negative rows.
+            translation (:obj:`numpy array`): The translation (x,y,z) of the sample in microns. shape=(3,)
 
         Returns:
             :obj:`numpy array`: The projected image. shape=(det_row_count, det_col_count).
@@ -76,6 +83,7 @@ class GpuProjector(object):
             voxel_size,
             ray_direction,
             detector_corners,
+            translation,
         )
         projection_image = self._bin_projection(projection_image)
         return projection_image
@@ -87,6 +95,7 @@ class GpuProjector(object):
         voxel_size,
         ray_direction,
         detector_corners,
+        translation=np.zeros((3,)),
     ):
         """Backpropagate the pixel values of a detector image to the sample volume.
 
@@ -102,6 +111,7 @@ class GpuProjector(object):
                 from the crl opening). d1 is to the left of d0 and d2 above d0. d0,d1,d2 is arranged counter
                 clockwise. The vector from d0 to d1 defined the negative columns of the detector and the
                 vector from d0 to d2 defines the negative rows.
+            translation (:obj:`numpy array`): The translation (x,y,z) of the sample in microns. shape=(3,)
 
         Returns:
             :obj:`np.ndarray`: The voxel volume populated by the backprojected values of detector_image.
@@ -111,6 +121,9 @@ class GpuProjector(object):
 
         n_slices, n_rows, n_cols = o, n, m
         vol_geom = astra.create_vol_geom((n_rows, n_cols, n_slices))
+
+        vol_geom = astra.functions.move_vol_geom(vol_geom, translation)
+
         proj_geom = self._get_astra_projector(
             voxel_size,
             ray_direction,
@@ -150,6 +163,7 @@ class GpuProjector(object):
         voxel_size,
         ray_direction,
         detector_corners,
+        translation,
     ):
         """Project a voxel volume block on gpu."""
         proj_geom = self._get_astra_projector(
@@ -161,6 +175,8 @@ class GpuProjector(object):
         astra_voxel_volume = np.swapaxes(voxel_volume, 0, 2)
         n_slices, n_rows, n_cols = astra_voxel_volume.shape
         vol_geom = astra.create_vol_geom((n_rows, n_cols, n_slices))
+
+        vol_geom = astra.functions.move_vol_geom(vol_geom, translation)
         sino_id, sino = astra.create_sino3d_gpu(astra_voxel_volume, proj_geom, vol_geom)
         astra.data3d.delete(sino_id)
         return sino[:, 0, :]
@@ -222,7 +238,6 @@ class GpuProjector(object):
 
 
 if __name__ == "__main__":
-
     # data = np.ones((128, 128, 128), dtype=np.float32)
 
     # TODO: look into making arrow image inx-y to understand projection
@@ -233,9 +248,7 @@ if __name__ == "__main__":
 
     data[
         data.shape[0] // 2, data.shape[1] // 2 - wn : data.shape[1] // 2 + wn, wn:-wn
-    ] = np.linspace(
-        1, 4, data.shape[2] - 2 * wn
-    )  # z-axis
+    ] = np.linspace(1, 4, data.shape[2] - 2 * wn)  # z-axis
     for i in range(pn):
         data[
             data.shape[0] // 2,
@@ -245,9 +258,7 @@ if __name__ == "__main__":
 
     data[
         data.shape[0] // 2, wn:-wn, data.shape[2] // 2 - wn : data.shape[2] // 2 + wn
-    ] = np.linspace(4, 7, data.shape[1] - 2 * wn)[
-        :, np.newaxis
-    ]  # y-axis
+    ] = np.linspace(4, 7, data.shape[1] - 2 * wn)[:, np.newaxis]  # y-axis
     for i in range(pn):
         data[
             data.shape[0] // 2,
@@ -265,7 +276,7 @@ if __name__ == "__main__":
 
     x, y, z = np.eye(3)
     eta = np.radians(0)
-    theta = np.radians(15.416837)
+    theta = np.radians(0)
     Reta = Rotation.from_rotvec(x * eta).as_matrix()
     Rtheta = Rotation.from_rotvec(-2 * y * theta).as_matrix()
     xi, yi, zi = (Reta @ Rtheta @ np.eye(3)).T
@@ -316,12 +327,14 @@ if __name__ == "__main__":
         super_sampling=2,
     )
 
+    translation = np.array([25, 25, -25])
     mag_vox_size = voxel_size * 10
     image = projector(
         data,
         mag_vox_size,
         ray_direction,
         detector_corners,
+        translation,
     )
 
     m, n, o = data.shape
@@ -332,6 +345,7 @@ if __name__ == "__main__":
         mag_vox_size,
         ray_direction,
         detector_corners,
+        translation,
     )
 
     acc_backprojection = projector.backproject(
@@ -340,6 +354,7 @@ if __name__ == "__main__":
         mag_vox_size,
         ray_direction,
         detector_corners,
+        translation,
     )
 
     backprojection = np.divide(

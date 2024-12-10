@@ -2,32 +2,32 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-class HighPrecisionRotation(object):
-    """Scipy wrapper to have R @ vector work out of the box without having to call
-    the .apply() method, and to allow for the notation of R.T = R.inv()
+# class HighPrecisionRotation(object):
+#     """Scipy wrapper to have R @ vector work out of the box without having to call
+#     the .apply() method, and to allow for the notation of R.T = R.inv()
 
-    Args:
-        object (scipy.spatial.transform.Rotation): scipy_rotation
-    """
+#     Args:
+#         object (scipy.spatial.transform.Rotation): scipy_rotation
+#     """
 
-    def __init__(self, scipy_rotation):
-        self.scipy_rotation = scipy_rotation
+#     def __init__(self, scipy_rotation):
+#         self.scipy_rotation = scipy_rotation
 
-    def __matmul__(self, vectors):
-        return self.scipy_rotation.apply(vectors.T).T
+#     def __matmul__(self, vectors):
+#         return self.scipy_rotation.apply(vectors.T).T
 
-    def __mul__(self, other):
-        return HighPrecisionRotation(self.scipy_rotation * other.scipy_rotation)
+#     def __mul__(self, other):
+#         return HighPrecisionRotation(self.scipy_rotation * other.scipy_rotation)
 
-    def __rmul__(self, other):
-        return HighPrecisionRotation(other.scipy_rotation * self.scipy_rotation)
+#     def __rmul__(self, other):
+#         return HighPrecisionRotation(other.scipy_rotation * self.scipy_rotation)
 
-    def as_matrix(self):
-        return self.scipy_rotation.as_matrix()
+#     def as_matrix(self):
+#         return self.scipy_rotation.as_matrix()
 
-    @property
-    def T(self):
-        return HighPrecisionRotation(self.scipy_rotation.inv())
+#     @property
+#     def T(self):
+#         return HighPrecisionRotation(self.scipy_rotation.inv())
 
 
 def _lab_to_Q_rot_mat(Q_lab):
@@ -117,24 +117,24 @@ def curl(tensor_field, dx=(1, 1, 1)):
     return out
 
 
-def elasticity_matrix(E, v):
+def elasticity_matrix(E, nu):
     """Create a 6x6 elasticity matrix for isotropic material.
 
     Args:
         E (:obj:`float`): Young's modulus.
-        v (:obj:`float`): Poisson's ratio.
+        nu (:obj:`float`): Poisson's ratio.
 
     Returns:
         :obj:`numpy array`: The 6x6 elasticity matrix.
     """
-    return (E / ((1 + v) * (1 - 2 * v))) * np.array(
+    return (E / ((1 + nu) * (1 - 2 * nu))) * np.array(
         [
-            [1 - v, v, v, 0, 0, 0],
-            [v, 1 - v, v, 0, 0, 0],
-            [v, v, 1 - v, 0, 0, 0],
-            [0, 0, 0, 0.5 - v, 0, 0],
-            [0, 0, 0, 0, 0.5 - v, 0],
-            [0, 0, 0, 0, 0, 0.5 - v],
+            [1 - nu, nu, nu, 0, 0, 0],
+            [nu, 1 - nu, nu, 0, 0, 0],
+            [nu, nu, 1 - nu, 0, 0, 0],
+            [0, 0, 0, (1 - 2 * nu) / 2, 0, 0],
+            [0, 0, 0, 0, (1 - 2 * nu) / 2, 0],
+            [0, 0, 0, 0, 0, (1 - 2 * nu) / 2],
         ]
     )
 
@@ -230,10 +230,11 @@ def beta_to_stress(beta, elasticity_matrix, rotation=np.eye(3)):
     """
     beta = change_basis(beta, rotation)
 
-    epsilon = 0.5 * (beta + beta.swapaxes(3, 4))
+    epsilon = 0.5 * (beta + beta.transpose(0, 1, 2, 4, 3))
+
     eps_flat = epsilon.reshape(-1, 9).T
     eps_flat_voigt = eps_flat[[0, 4, 8, 5, 2, 1], :]
-    eps_flat_voigt[:, 3:] *= 2
+    eps_flat_voigt[3:, :] *= 2
 
     stress_flat_voigt = elasticity_matrix @ eps_flat_voigt
     stress_voigt = stress_flat_voigt.reshape(6, *beta.shape[:3])

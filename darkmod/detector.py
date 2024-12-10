@@ -136,6 +136,7 @@ class Detector(object):
         optical_axis,
         magnification,
         sample_rotation=np.eye(3),
+        sample_translation=np.zeros(3),
     ):
         """Render an image by projecting the voxel_volume unto the detector plane.
 
@@ -152,6 +153,8 @@ class Detector(object):
             sample_rotation (:obj:`np.ndarray`): The rotation matrix that brings sample vectors
                 to lab frame. I.e the goniometer setting. Defaults to np.eye(3) in which case
                 sample and lab frames are considered to be aligned. shape=(3,3).
+            sample_translation (:obj:`np.ndarray`): The absolute translation of the sample in lab frame
+                in units of microns. shape=(3,) (x,y,z). Defaults to np.zeros(3).
 
         Returns:
             :obj:`np.ndarray`: The detector image of shape=(det_row_count, det_col_count)
@@ -173,11 +176,13 @@ class Detector(object):
 
         # The voxel volume can now be tomographically ray-traced along the
         # diffracted ray_direction resultingin a detector image.
+
         detector_image = self._projector(
             voxel_volume,
             magnified_voxel_size,
             ray_direction,
             detector_corners,
+            sample_translation,
         )
 
         # The resulting image should be inverted due to the CRL lens effect.
@@ -193,6 +198,8 @@ class Detector(object):
         optical_axis,
         magnification,
         sample_rotation=np.eye(3),
+        sample_translation=np.zeros(3),
+        voxel_weights = None,
     ):
         """Backpropagate the pixel values of a detector image to the sample volume.
 
@@ -217,6 +224,8 @@ class Detector(object):
             sample_rotation (:obj:`np.ndarray`): The rotation matrix that brings sample vectors
                 to lab frame. I.e the goniometer setting. Defaults to np.eye(3) in which case
                 sample and lab frames are considered to be aligned. shape=(3,3).
+            sample_translation (:obj:`np.ndarray`): The absolute translation of the sample in lab frame
+                in units of microns. shape=(3,) (x,y,z). Defaults to np.zeros(3).
 
         Returns:
             :obj:`np.ndarray`: The voxel volume populated by the backprojected values of detector_image.
@@ -234,6 +243,7 @@ class Detector(object):
             magnified_voxel_size,
             ray_direction,
             detector_corners,
+            sample_translation,
         )
 
         acc_backprojection = self._projector.backproject(
@@ -242,6 +252,7 @@ class Detector(object):
             magnified_voxel_size,
             ray_direction,
             detector_corners,
+            sample_translation,
         )
 
         backprojection = np.divide(
