@@ -1,8 +1,8 @@
-import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.transform import Rotation
+from scipy.special import erf, iv
 from scipy.special import gamma as gamma_function
-from scipy.special import iv, erf
+
 
 class UniformSpherical:
     """
@@ -22,7 +22,7 @@ class UniformSpherical:
         Returns:
             :obj:`float`: Likelihood of the given x.
         """
-        return np.ones( (x.shape[1],) ) / (4*np.pi)
+        return np.ones((x.shape[1],)) / (4 * np.pi)
 
     def sample(self, number_of_samples):
         """
@@ -83,9 +83,9 @@ class UniformSphericalCone:
         Returns:
             :obj:`float`: Likelihood of the given x.
         """
-        area = 2*np.pi*(1-np.cos(self.phi_max/2.))
-        pdf_support_array = np.arccos( x.T@self.pole ) < self.phi_max
-        return pdf_support_array * np.ones( (x.shape[1],) ) / area
+        area = 2 * np.pi * (1 - np.cos(self.phi_max / 2.0))
+        pdf_support_array = np.arccos(x.T @ self.pole) < self.phi_max
+        return pdf_support_array * np.ones((x.shape[1],)) / area
 
     def sample(self, number_of_samples):
         """
@@ -157,12 +157,12 @@ class Normal:
         return np.random.normal(self.mu, scale=self.sigma, size=(number_of_samples,))
 
     def _log_gauss_pdf(self, x):
-        s2 = 2*self.sigma*self.sigma
-        dx = (x - self.mu)
-        return - dx * dx / s2
+        s2 = 2 * self.sigma * self.sigma
+        dx = x - self.mu
+        return -dx * dx / s2
 
     def _norm_factor(self):
-        return np.sqrt(np.pi*2*self.sigma*self.sigma)
+        return np.sqrt(np.pi * 2 * self.sigma * self.sigma)
 
 
 class TruncatedNormal:
@@ -228,24 +228,20 @@ class TruncatedNormal:
 
     def _log_truncated_pdf(self, x):
         s2 = 2 * self.sigma * self.sigma
-        dx = (x - self.mu)
-        log_exp = - dx * dx / s2
+        dx = x - self.mu
+        log_exp = -dx * dx / s2
         m = (self.a < x) * (self.b > x)
         log_exp[~m] = -np.inf
         return log_exp
 
     def _cdf(self, x):
-        """Cumulative distribution function for a normal.
-        """
+        """Cumulative distribution function for a normal."""
         z = (x - self.mu) / self.sigma
-        return 0.5 * ( 1 + erf( z / np.sqrt(2) ) )
+        return 0.5 * (1 + erf(z / np.sqrt(2)))
 
     def _norm_factor(self):
-        """Factor such that exp(...)/factor is integrates to 1 on a to b.
-        """
-        return np.sqrt(np.pi*2)*self.sigma*(self._cdf(self.b) - self._cdf(self.a))
-
-
+        """Factor such that exp(...)/factor is integrates to 1 on a to b."""
+        return np.sqrt(np.pi * 2) * self.sigma * (self._cdf(self.b) - self._cdf(self.a))
 
 
 class MultivariateTruncatedNormal(object):
@@ -263,11 +259,11 @@ class MultivariateTruncatedNormal(object):
     """
 
     def __init__(self, mu, cov, a, b):
-        assert cov.shape[0] == mu.shape[0], 'covariance and mean shape do not match'
-        assert cov.shape[0] == cov.shape[1], 'covariance is not square'
-        assert np.linalg.matrix_rank(cov) == len(mu), 'ill conditioned covariance'
-        assert np.linalg.cond(cov) < 1e12, 'ill conditioned covariance'
-        assert np.allclose(cov, cov.T), 'Covariance is not symmetric'
+        assert cov.shape[0] == mu.shape[0], "covariance and mean shape do not match"
+        assert cov.shape[0] == cov.shape[1], "covariance is not square"
+        assert np.linalg.matrix_rank(cov) == len(mu), "ill conditioned covariance"
+        assert np.linalg.cond(cov) < 1e12, "ill conditioned covariance"
+        assert np.allclose(cov, cov.T), "Covariance is not symmetric"
         self.mu = mu
         self.cov = cov
         self._cov_inv = np.linalg.inv(cov)
@@ -295,8 +291,8 @@ class MultivariateTruncatedNormal(object):
             return np.exp(log_exp)
 
     def _is_supported(self, sample):
-        ub = np.all( sample < self.b, axis=0 )
-        lb = np.all( sample > self.a, axis=0 ) 
+        ub = np.all(sample < self.b, axis=0)
+        lb = np.all(sample > self.a, axis=0)
         return ub & lb
 
     def sample(self, number_of_samples):
@@ -309,18 +305,22 @@ class MultivariateTruncatedNormal(object):
         Returns:
             :obj:`np.ndarray`: Sample from a multivariate Gaussian. shape=(n, number_of_samples).
         """
-        sample = np.random.multivariate_normal(self.mu, cov=self.cov, size=(number_of_samples,)).T
+        sample = np.random.multivariate_normal(
+            self.mu, cov=self.cov, size=(number_of_samples,)
+        ).T
         x = sample[:, self._is_supported(sample)]
         while x.shape[1] < number_of_samples:
-            sample = np.random.multivariate_normal(self.mu, cov=self.cov, size=(number_of_samples,)).T
+            sample = np.random.multivariate_normal(
+                self.mu, cov=self.cov, size=(number_of_samples,)
+            ).T
             x = np.concatenate((x, sample[:, self._is_supported(sample)]), axis=1)
         return x[:, 0:number_of_samples]
 
     def _log_mult_trunc_gauss_pdf(self, x):
-        dx = (x - self.mu[:, np.newaxis])
-        exponent = -0.5 * np.sum( dx * (self._cov_inv @ dx), axis=0)
-        exponent[np.any( x < self.a, axis=0)] = -np.inf
-        exponent[np.any( x > self.b, axis=0)] = -np.inf
+        dx = x - self.mu[:, np.newaxis]
+        exponent = -0.5 * np.sum(dx * (self._cov_inv @ dx), axis=0)
+        exponent[np.any(x < self.a, axis=0)] = -np.inf
+        exponent[np.any(x > self.b, axis=0)] = -np.inf
         return exponent
 
 
@@ -334,11 +334,11 @@ class MultivariateNormal(object):
     """
 
     def __init__(self, mu, cov):
-        assert cov.shape[0] == mu.shape[0], 'covariance and mean shape do not match'
-        assert cov.shape[0] == cov.shape[1], 'covariance is not square'
-        assert np.linalg.matrix_rank(cov) == len(mu), 'ill conditioned covariance'
-        assert np.linalg.cond(cov) < 1e12, 'ill conditioned covariance'
-        assert np.allclose(cov, cov.T), 'Covariance is not symmetric'
+        assert cov.shape[0] == mu.shape[0], "covariance and mean shape do not match"
+        assert cov.shape[0] == cov.shape[1], "covariance is not square"
+        assert np.linalg.matrix_rank(cov) == len(mu), "ill conditioned covariance"
+        assert np.linalg.cond(cov) < 1e12, "ill conditioned covariance"
+        assert np.allclose(cov, cov.T), "Covariance is not symmetric"
         self.mu = mu
         self.cov = cov
         self._cov_inv = np.linalg.inv(cov)
@@ -376,14 +376,16 @@ class MultivariateNormal(object):
         Returns:
             :obj:`np.ndarray`: Sample from a multivariate Gaussian. shape=(n, number_of_samples).
         """
-        return np.random.multivariate_normal(self.mu, cov=self.cov, size=(number_of_samples,)).T
+        return np.random.multivariate_normal(
+            self.mu, cov=self.cov, size=(number_of_samples,)
+        ).T
 
     def _log_mult_gauss_pdf(self, x):
-        dx = (x - self.mu[:, np.newaxis])
-        return -0.5 * np.sum( dx * (self._cov_inv @ dx), axis=0)
+        dx = x - self.mu[:, np.newaxis]
+        return -0.5 * np.sum(dx * (self._cov_inv @ dx), axis=0)
 
     def _norm_factor(self):
-        return np.sqrt( (2 * np.pi)**len(self.mu) * np.linalg.det(self.cov))
+        return np.sqrt((2 * np.pi) ** len(self.mu) * np.linalg.det(self.cov))
 
 
 class Kent:
@@ -397,22 +399,18 @@ class Kent:
     """
 
     def __init__(self, gamma, kappa, beta):
-        assert kappa > 2*beta
-        assert 2*beta >= 0
-        assert np.allclose( gamma.T @ gamma, np.eye(3, 3))
+        assert kappa > 2 * beta
+        assert 2 * beta >= 0
+        assert np.allclose(gamma.T @ gamma, np.eye(3, 3))
 
         self.gamma = gamma
         self.kappa = kappa
         self.beta = beta
 
-
-
         if self.kappa < 100:
-
             phi_max = np.pi
 
         else:
-
             # A very narrow kent distirbution
             #
             # The idea is to set the phi_max to an angle such that the
@@ -449,15 +447,15 @@ class Kent:
             # given that the Kent is very similar to a normal on the sphere.
 
             self._eps = 1e-5
-            b = 1 + np.log(self._eps)/kappa
-            a = (beta/kappa)
-            if a==0:
-                phi_max = np.arccos( b )
+            b = 1 + np.log(self._eps) / kappa
+            a = beta / kappa
+            if a == 0:
+                phi_max = np.arccos(b)
             else:
-                cc = (1/(2*a)) - np.sqrt( (1/(4*a*a)) - ((b - a)/a) )
-                phi_max = np.arccos( cc )
+                cc = (1 / (2 * a)) - np.sqrt((1 / (4 * a * a)) - ((b - a) / a))
+                phi_max = np.arccos(cc)
 
-        self._uniform_spherical_cone = UniformSphericalCone(phi_max, self.gamma[:,0])
+        self._uniform_spherical_cone = UniformSphericalCone(phi_max, self.gamma[:, 0])
 
     def __call__(self, x, normalise=True, log=False):
         """
@@ -480,7 +478,6 @@ class Kent:
             return np.exp(log_exp)
         elif not normalise and log:
             return log_exp
-
 
     def sample(self, number_of_samples):
         """
@@ -507,7 +504,6 @@ class Kent:
 
         return sample[:, :number_of_samples]
 
-
     def _log_kent_pdf(self, x):
         """
         Compute the un-nomralised-log-PDF of the Kent distribution for a set of points x on S^2.
@@ -521,26 +517,28 @@ class Kent:
         g1, g2, g3 = self.gamma.T @ x
         return self.kappa * g1 + self.beta * (g2**2 - g3**2)
 
-
     def _norm_factor(self, rtol=1e-16):
         """Approximate normalisation constant for the Kent distribution.
 
         (This is the c(kappa, beta) function @ https://en.wikipedia.org/wiki/Kent_distribution)
         """
         if self.beta == 0:
-            return 4*np.pi * (1/self.kappa) * np.sinh(self.kappa)
+            return 4 * np.pi * (1 / self.kappa) * np.sinh(self.kappa)
         else:
             normalisation_const = 0
             term_number_j = 0
             j = 0
-            while j < 10 or np.abs(term_number_j) > np.abs(normalisation_const)*rtol:
-                f1 = np.exp( np.log(self.beta)*2*j + np.log(0.5*self.kappa)*(-2*j-0.5) )
-                f2 = iv(2*j+0.5, self.kappa)
-                f3 = gamma_function(j+0.5) / gamma_function(j+1)
-                term_number_j = f1*f2*f3
+            while j < 10 or np.abs(term_number_j) > np.abs(normalisation_const) * rtol:
+                f1 = np.exp(
+                    np.log(self.beta) * 2 * j
+                    + np.log(0.5 * self.kappa) * (-2 * j - 0.5)
+                )
+                f2 = iv(2 * j + 0.5, self.kappa)
+                f3 = gamma_function(j + 0.5) / gamma_function(j + 1)
+                term_number_j = f1 * f2 * f3
                 normalisation_const += term_number_j
-                j+=1
-            return 2*np.pi*normalisation_const
+                j += 1
+            return 2 * np.pi * normalisation_const
 
 
 if __name__ == "__main__":

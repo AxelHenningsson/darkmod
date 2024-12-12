@@ -85,6 +85,9 @@ class Crystal(object):
         assert np.allclose(dx, dy) and np.allclose(dx, dz), "voxels must be cubic"
         self.voxel_size = dx
 
+    def _get_x_lab_flat(self):
+        return self.goniometer.R @ self._x + self.goniometer.translation[:, np.newaxis]
+
     @property
     def X(self):
         """The crystal x-cooridnates in sample frame.
@@ -308,8 +311,11 @@ class Crystal(object):
         Returns:
             :obj:`numpy array`: A field of Q-vectors, shape=(n,m,o,3).
         """
-        Q_lab_flat = self.goniometer.R @ self._get_Q_sample_flat(hkl).T
+        Q_lab_flat = self._get_Q_lab_flat(hkl)
         return Q_lab_flat.T.reshape(self._grid_vector_shape)
+
+    def _get_Q_lab_flat(self, hkl):
+        return self.goniometer.R @ self._get_Q_sample_flat(hkl).T
 
     def _get_Q_sample_flat(self, hkl):
         if self._F is None:
@@ -516,20 +522,21 @@ class Crystal(object):
         Returns:
             :obj:`numpy array`: A 2D detector image.
         """
-        Q_lab_flat = self.goniometer.R @ self._get_Q_sample_flat(hkl).T
 
-        # probably should be a function....
-        x_lab = self.goniometer.R @ self._x
-        x_lab += self.translation[:, np.newaxis]
-
+        x_lab = self._get_x_lab_flat()  # 20 %
+  
         if spatial_artefact:
             angular_crl_shifts = crl.get_angular_shifts(x_lab)
         else:
             angular_crl_shifts = None
 
-        p_Q = resolution_function(Q_lab_flat, angular_crl_shifts=angular_crl_shifts)
+        Q_lab_flat = self._get_Q_lab_flat(hkl)  # 20 %
 
-        w = beam(x_lab)
+        p_Q = resolution_function(
+            Q_lab_flat, angular_crl_shifts=angular_crl_shifts
+        )  # 40 %
+
+        w = beam(x_lab)  # 20 %
         voxel_volume = (p_Q * w).reshape(self._grid_scalar_shape)
 
         image = detector.render(

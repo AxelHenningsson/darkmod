@@ -7,7 +7,6 @@ classical or standard scans. This module provides functions for common scans, su
 These functions not only facilitate standard scans but also serve as examples for setting up custom scans.
 """
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -23,6 +22,7 @@ def phi_chi(
     spatial_artefact=True,
     detector_noise=True,
     scan_mask=None,
+    normalize=True,
 ):
     """
     Simulate a mosaicity scan over phi and chi angles.
@@ -47,6 +47,9 @@ def phi_chi(
         scan_mask (:obj:`numpy array`): A 2D boolean shape = (len(phi_values), len(chi_values)) mask. Only where
             the scan_mask is true will an image be taken. Speeds up simulation for sparse scans. Defaults to None,
             in which case all values on a grid defined by phi_values and chi_values are scanned.
+        normalize (:obj:`bool`): If True, normalizes the diffraction pattern to the camera's range. Defaults to True.
+            This will device all frames with the maximum value of the stack and multiply by 64000. It implies that
+            rounding and conversion to uint16 will be performed.
 
     Returns:
         mosa (:obj:`numpy array`): A 4D array representing the diffraction signal over the scanned phi and chi values.
@@ -70,9 +73,7 @@ def phi_chi(
     # Iterate over all combinations of phi and chi angles
     for i in range(len(phi_values)):
         for j in range(len(chi_values)):
-
             if scan_mask is None or scan_mask[i, j]:
-
                 # Update goniometer angles to the current phi and chi values
                 _set_dfxm_setup(
                     crystal.goniometer,
@@ -106,7 +107,8 @@ def phi_chi(
     )
 
     # Normalize the diffraction pattern to (approximately) the camera's range
-    image_stack = _normalize_image_stack(image_stack, detector_noise, detector)
+    if normalize:
+        image_stack = _normalize_image_stack(image_stack, detector_noise, detector)
 
     return image_stack
 
@@ -123,6 +125,7 @@ def theta_phi_chi(
     resolution_function,
     spatial_artefact=True,
     detector_noise=True,
+    normalize=True,
 ):
     """
     Simulate a strain-mosaicity scan over theta, phi, and chi angles.
@@ -149,6 +152,9 @@ def theta_phi_chi(
         resolution_function (:obj:`darkmod.resolution`): Function defining the resolution function in Q-space.
         spatial_artefact (:obj:`bool`): Simulate spatial artifacts due to optical axis offset. Defaults to True.
         detector_noise (:obj:`bool`): If True, adds noise to the simulated detector data. Defaults to True.
+        normalize (:obj:`bool`): If True, normalizes the diffraction pattern to the camera's range. Defaults to True.
+            This will device all frames with the maximum value of the stack and multiply by 64000. It implies that
+            rounding and conversion to uint16 will be performed.
 
     Returns:
         image_stack (:obj:`numpy array`): A 5D array representing the diffraction signal over the scanned
@@ -176,7 +182,6 @@ def theta_phi_chi(
     for i in range(len(delta_theta_values)):
         for j in range(len(phi_values)):
             for k in range(len(chi_values)):
-
                 # Update goniometer and crl
                 _set_dfxm_setup(
                     crystal.goniometer,
@@ -196,6 +201,7 @@ def theta_phi_chi(
                     detector,
                     beam,
                     spatial_artefact=spatial_artefact,
+                    
                 )
 
     # Reset the CRL, resolution function, and goniometer to the original angles
@@ -210,7 +216,8 @@ def theta_phi_chi(
     )
 
     # Normalize the diffraction pattern to (approximately) the camera's range
-    image_stack = _normalize_image_stack(image_stack, detector_noise, detector)
+    if normalize:
+        image_stack = _normalize_image_stack(image_stack, detector_noise, detector)
 
     return image_stack
 

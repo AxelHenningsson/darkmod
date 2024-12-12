@@ -78,6 +78,7 @@ class GpuProjector(object):
             :obj:`numpy array`: The projected image. shape=(det_row_count, det_col_count).
 
         """
+
         projection_image = self._project(
             voxel_volume,
             voxel_size,
@@ -85,6 +86,7 @@ class GpuProjector(object):
             detector_corners,
             translation,
         )
+
         projection_image = self._bin_projection(projection_image)
         return projection_image
 

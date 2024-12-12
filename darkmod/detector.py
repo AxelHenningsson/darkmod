@@ -199,7 +199,7 @@ class Detector(object):
         magnification,
         sample_rotation=np.eye(3),
         sample_translation=np.zeros(3),
-        voxel_weights = None,
+        voxel_weights=None,
     ):
         """Backpropagate the pixel values of a detector image to the sample volume.
 
@@ -316,7 +316,7 @@ def _get_det_corners_orthogonal_mount(
     x, y, z = np.eye(3)
     dr = pixel_size * det_row_count / 2.0
     dc = pixel_size * det_col_count / 2.0
-    d0 = -y * dc - x * dr
+    d0 = -y * dc - z * dr
     d1 = d0 + y * det_col_count * pixel_size
     d2 = d0 + z * det_row_count * pixel_size
     detector_corners = np.array([d0, d1, d2]).T
@@ -335,6 +335,8 @@ def _get_det_corners_orthogonal_mount(
     axis /= np.linalg.norm(axis)
     R_beta = Rotation.from_rotvec(axis * beta).as_matrix()
     detector_corners = R_beta @ detector_corners
+
+    detector_corners += crl.optical_axis.reshape(3, 1) * crl.L
 
     # i.e, we have now fulfilled the following:
     # d0, d1, d2 = detector_corners.T

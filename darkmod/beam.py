@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
+
 from darkmod.distribution import Normal
 
 
@@ -36,10 +36,10 @@ class HeavysideBeam(object):
         Returns:
             :obj:`numpy.ndarray`: Intensity weight for the given positions.
         """
-        weights = (np.abs(x[1]) < self.y_width // 2.0) & (
-            np.abs(x[2]) < self.z_width // 2.0
+        weights = (np.abs(x[1]) < self.y_width / 2.0) & (
+            np.abs(x[2]) < self.z_width / 2.0
         )
-        return weights
+        return weights.astype(float)
 
 
 class GaussianBeam(object):
@@ -77,7 +77,7 @@ class GaussianBeam(object):
         Returns:
             :obj:`numpy.ndarray`: Intensity weight for the given positions.
         """
-        return self._intensity_y(x[1])*self._intensity_z(x[2])
+        return self._intensity_y(x[1]) * self._intensity_z(x[2])
 
 
 class GaussianLineBeam(object):
@@ -116,4 +116,5 @@ class GaussianLineBeam(object):
 
 
 if __name__ == "__main__":
+    pass
     pass

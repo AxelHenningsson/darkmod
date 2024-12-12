@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.spatial.transform import Rotation
 
 
 def _lsq(Q, G_0, mask):
@@ -67,3 +68,59 @@ def deformation(diffraction_vectors, hkl, UB_reference):
     F_sample = _lsq(Q, G_0, mask)
 
     return F_sample
+
+
+def diffraction_vectors(
+    moment_map,
+    crystal,
+    lambda_0,
+    crl,
+):
+    """Reconstruct the sample-Q vectors from the mean angular values in phi, chi and theta.
+
+    This deploys the associated rotatations to bring the Q-reference vector the Bragg condition.
+
+    Args:
+        moment_map (:obj:`numpy.ndarray`): The mean angular values in phi, chi and theta. shape=(*detector.shape, 3)
+        crystal (:obj:`Crystal`): The crystal object.
+        lambda_0 (:obj:`float`): The wavelength of the beam.
+        crl (:obj:`CRL`): The compound refractive lens object.
+
+    Returns:
+        (:obj:`numpy.ndarray`): The reconstructed Q vectors in sample space. shape=(*detector.shape, 3)
+    """
+
+    # TODO: implement this with an interface that does not require the crystal and crl
+    # objects This should be part of the darling module.
+
+    # NOTE: tested against slow poke loop code and passed. 11 Dec.
+
+    muf = moment_map.reshape(-1, 3)
+
+    x, y, z = np.eye(3)
+
+    R_omega = crystal.goniometer.get_R_omega(crystal.goniometer.omega)
+    rotation_eta = Rotation.from_rotvec(x * (crl.eta))
+
+    R_s = crystal.goniometer.get_R_top(muf[:, np.newaxis, 1], muf[:, np.newaxis, 2])
+    d_rec = lambda_0 / (2 * np.sin(crl.theta + muf[:, 0]))
+    Q_norm = 2 * np.pi / d_rec
+    rotation_th = Rotation.from_rotvec(
+        (y.reshape(3, 1) * (-2 * (crl.theta + muf[:, 0]))).T
+    ).as_matrix()
+
+    ko = rotation_eta.as_matrix() @ (rotation_th @ x).T
+    ki = x.reshape(3, 1)
+    _Q = ko - ki
+    _Q = _Q / np.linalg.norm(_Q, axis=0)
+
+    Q_sample_0 = R_omega.T @ _Q * Q_norm
+
+    Q_rec = np.zeros_like(muf)
+
+    R_s_T = R_s.transpose(0, 2, 1)
+    Q_rec[:, 0] = np.sum(R_s_T[:, 0, :] * Q_sample_0.T, axis=1)
+    Q_rec[:, 1] = np.sum(R_s_T[:, 1, :] * Q_sample_0.T, axis=1)
+    Q_rec[:, 2] = np.sum(R_s_T[:, 2, :] * Q_sample_0.T, axis=1)
+
+    return Q_rec.reshape(moment_map.shape)
