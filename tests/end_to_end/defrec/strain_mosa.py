@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from darkmod import laue, scan
+from darkmod import laue, reconstruct, scan
 from darkmod.beam import GaussianLineBeam, HeavysideBeam
 from darkmod.crl import CompundRefractiveLens
 from darkmod.crystal import Crystal
@@ -35,18 +35,24 @@ def main(
     spatial_artefact=False,
     detector_noise=False,
     plot=False,
+    factor=8,
 ):
     number_of_lenses = 69
     lens_space = 1600  # microns
     lens_radius = 50  # microns
-    refractive_decrement = (2.359 / 2.0) * 1e-6
     magnification = 15.1
-    crl = CompundRefractiveLens(
-        number_of_lenses, lens_space, lens_radius, refractive_decrement, magnification
-    )
 
     energy = 19.1  # keV
     lambda_0 = laue.keV_to_angstrom(energy)
+
+    Z = 4  # atomic number, berillium
+    rho = 1.845  # density, berillium, g/cm^3
+    A = 9.0121831  # atomic mass number, berillium, g/mol
+    delta = laue.refractive_decrement(Z, rho, A, energy)
+
+    crl = CompundRefractiveLens(
+        number_of_lenses, lens_space, lens_radius, delta, magnification
+    )
 
     # Instantiate a cubic AL crystal (space group 225)
     unit_cell = [4.0493, 4.0493, 4.0493, 90.0, 90.0, 90.0]
@@ -91,24 +97,24 @@ def main(
         crystal.goniometer.omega = np.radians(6.431585)
         thmax = 0.75
         phimax = 0.35
-        chimax = 1.9
+        chimax = 2.3
     elif reflection == 2:  # Reflection #2
         hkl = np.array([-1.0, 1.0, 3.0])
         crystal.goniometer.omega = np.radians(96.431585)
         thmax = 0.7
-        phimax = 2.0
+        phimax = 2.3
         chimax = 0.65
     elif reflection == 3:  # Reflection #3
         hkl = np.array([1.0, 1.0, 3.0])
         crystal.goniometer.omega = np.radians(186.431585)
         thmax = 0.75
         phimax = 0.35
-        chimax = 1.9
+        chimax = 2.3
     elif reflection == 4:
         hkl = np.array([-1.0, 1.0, 3.0])
         crystal.goniometer.omega = np.radians(96.431585)
         thmax = 0.7
-        phimax = 2.0
+        phimax = 2.3
         chimax = 0.65
 
     eta = np.radians(20.232593)
@@ -117,10 +123,10 @@ def main(
     crl.goto(theta, eta)
 
     # Discretize the crystal
-    factor = 8
-    xg = np.linspace(-7, 7, 33 * factor + 1)  # microns
-    yg = np.linspace(-7, 7, 33 * factor + 1)  # microns
-    zg = np.linspace(-7, 7, 33 * factor + 1)  # microns
+    _adder = int(factor % 2 == 0)
+    xg = np.linspace(-7, 7, 33 * factor + _adder)  # microns
+    yg = np.linspace(-7, 7, 33 * factor + _adder)  # microns
+    zg = np.linspace(-7, 7, 33 * factor + _adder)  # microns
 
     if 1:
         beam = GaussianLineBeam(z_std=0.1, energy=energy)  # 100 nm = 0.1 microns
@@ -143,11 +149,11 @@ def main(
         a -= 1
     if zg[b] < maxz:
         b += 1
-    if np.median(zg[a:b]) != 0:
+    if np.median(zg[a:b]) > 0:
         a -= 1
-
+    if np.median(zg[a:b]) < 0:
+        b += 1
     zg = zg[a:b]
-    print(zg)
 
     assert np.median(zg) == 0
     assert zg[0] <= minz
@@ -163,6 +169,12 @@ def main(
     dx = factor * (xg[1] - xg[0])
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
 
+    # print("zg ", zg)
+    # print("dx ", dx)
+    # print("beam.z_std ", beam.z_std)
+    # print("X.shape ", X.shape)
+    # print("X.size ", X.size)
+
     defgrad = straight_edge_dislocation((X, Y, Z), x0=[[0, 0, 0]], U=crystal.U)
 
     if ntheta == 1:
@@ -176,7 +188,9 @@ def main(
         assert np.abs(np.median(angarr)) < 1e-8, angarr
 
     crystal.discretize(X, Y, Z, defgrad)
-    # crystal.write("straight_edge_dislocation")
+
+    #crystal.write("straight_edge_dislocation")
+    #raise
 
     Q_lab = crystal.goniometer.R @ crystal.UB_0 @ hkl
     d_0 = (2 * np.pi) / np.linalg.norm(Q_lab)
@@ -192,12 +206,14 @@ def main(
     mu_lambda = lambda_0
 
     FWHM_CRL_vertical = 0.556 * 1e-3
-    angular_tilt = 0.73 * 1e-3  # perhaps this is what happened in Poulsen 2017?
+    FWHM_CRL_horizontal = FWHM_CRL_vertical
+
+    # angular_tilt = 0.73 * 1e-3  # perhaps this is what happened in Poulsen 2017?
     # the idea is that a slight horizontal titlt of the CRL will cause the
     # NA in the horixontal plane to decrease which would explain the rolling curves
     # discrepancies.
-    dh = (crl.length * np.sin(angular_tilt)) * 1e-6
-    FWHM_CRL_horizontal = FWHM_CRL_vertical - 2 * dh
+    # dh = (crl.length * np.sin(angular_tilt)) * 1e-6
+    # FWHM_CRL_horizontal = FWHM_CRL_vertical - 2 * dh
 
     # # TODO: truncation wont help
     resolution_function = PentaGauss(
@@ -281,7 +297,7 @@ def main(
     def get_beam_density(beam, crystal):
         # NOTE: this is not correct, the translation must be applied
         x_lab = crystal.goniometer.R @ crystal._x
-        x_lab += crystal.translation[:, np.newaxis]
+        x_lab += crystal.goniometer.translation[:, np.newaxis]
         sample_beam_density = beam(x_lab).reshape(crystal._grid_scalar_shape)
         return sample_beam_density
 
@@ -292,7 +308,7 @@ def main(
             crl.optical_axis,
             crl.magnification,
             crystal.goniometer.R,
-            crystal.translation,
+            crystal.goniometer.translation,
         )
         return w
 
@@ -308,7 +324,7 @@ def main(
                 crl.optical_axis,
                 crl.magnification,
                 crystal.goniometer.R,
-                crystal.translation,
+                crystal.goniometer.translation,
             )
         w = render_beam_density(sample_beam_density)
         Q_true = np.divide(
@@ -322,26 +338,12 @@ def main(
     Q_true = expected_Q(crystal, beam, detector)
 
     # sample space recon
-    Q_rec = np.zeros((mu.shape[0], mu.shape[1], 3))
-    R_omega = crystal.goniometer.get_R_omega(crystal.goniometer.omega)
-    rotation_eta = Rotation.from_rotvec(np.array([1, 0, 0]) * (crl.eta))
-
-    for i in range(mu.shape[0]):
-        R_s_ij = crystal.goniometer.get_R_top(
-            mu[i, :, np.newaxis, 1], mu[i, :, np.newaxis, 2]
-        )
-        for j in range(mu.shape[1]):
-            R_s = R_s_ij[j]
-            d_rec = lambda_0 / (2 * np.sin(crl.theta + mu[i, j, 0]))
-            Q_norm = 2 * np.pi / d_rec
-            rotation_th = Rotation.from_rotvec(
-                np.array([0, 1, 0]) * (-2 * (crl.theta + mu[i, j, 0]))
-            )
-            rot = (rotation_eta * rotation_th).as_matrix()
-            _Q = rot @ np.array([1, 0, 0]) - np.array([1, 0, 0])
-            _Q = _Q / np.linalg.norm(_Q)
-            Q_sample_0 = R_omega.T @ _Q * Q_norm
-            Q_rec[i, j] = R_s.T @ Q_sample_0
+    Q_rec = reconstruct.diffraction_vectors(
+        mu,
+        crystal,
+        lambda_0,
+        crl,
+    )
 
     d_field_rec = (2 * np.pi) / np.linalg.norm(Q_rec, axis=-1)
     d_field_true = (2 * np.pi) / np.linalg.norm(Q_true, axis=-1)
@@ -357,7 +359,7 @@ def main(
             crl.optical_axis,
             crl.magnification,
             crystal.goniometer.R,
-            crystal.translation,
+            crystal.goniometer.translation,
         )
 
     bp_Q_sample_3D_rec = np.zeros((*X.shape, 3))
@@ -369,7 +371,7 @@ def main(
             crl.optical_axis,
             crl.magnification,
             crystal.goniometer.R,
-            crystal.translation,
+            crystal.goniometer.translation,
         )
 
     if savedir is not None:
@@ -417,12 +419,40 @@ def main(
             voxel_size=crystal.voxel_size,
             bp_Q_sample_3D_true=bp_Q_sample_3D_true,
             bp_Q_sample_3D_rec=bp_Q_sample_3D_rec,
-            translation=crystal.translation,
+            translation=crystal.goniometer.translation,
             zi=zi,
             intensity_mask=mask,
         )
 
     if plot:
+        plt.style.use("dark_background")
+        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+        title_str = (
+            "Strain-Mosa detector image "
+            + "aquired at \n $\\theta$="
+            + str(theta_values[strain_mosa.shape[2] // 2] * 1e3)
+            + " mrad, "
+            + "$\phi$="
+            + str(phi_values[strain_mosa.shape[3] // 2] * 1e3)
+            + " mrad, "
+            + "$\chi$="
+            + str(chi_values[strain_mosa.shape[4] // 2] * 1e3)
+            + " mrad"
+        )
+        ax.set_title(title_str)
+        im = ax.imshow(
+            strain_mosa[
+                :,
+                :,
+                strain_mosa.shape[2] // 2,
+                strain_mosa.shape[3] // 2,
+                strain_mosa.shape[4] // 2,
+            ],
+            cmap="plasma",
+        )
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+
         fig, ax = plt.subplots(1, 3, figsize=(16, 6), sharex=True, sharey=True)
         _mu = crop(mu, mask)
         for i in range(3):
@@ -528,12 +558,16 @@ def main(
 
 if __name__ == "__main__":
     ntheta = 11
-    nphi = 21
-    nchi = 21
+    nphi = 41
+    nchi = 41
+    factor = 8
 
     profile = False
-    z_steps = [0]
-    reflections = [1]
+    z_steps = [-1, 0, 1]
+    # z_steps = [0]
+    # reflections = [1, 2, 3, 4]
+    # reflections = [1, 2]
+    reflections = [3, 4]
 
     pr = cProfile.Profile()
     pr.enable()
@@ -549,7 +583,7 @@ if __name__ == "__main__":
                 pr.enable()
 
             main(
-                savedir="/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves/tmp2",
+                savedir="/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves/high_res",
                 reflection=reflection,
                 ntheta=ntheta,
                 nphi=nphi,
@@ -558,6 +592,7 @@ if __name__ == "__main__":
                 spatial_artefact=False,
                 detector_noise=False,
                 plot=False,
+                factor=factor,
             )
 
             if profile:

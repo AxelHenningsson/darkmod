@@ -436,4 +436,4 @@ if __name__ == "__main__":
     # detector_noise=False,
     # factor=2,
 
-    main(11, 21, 21, False, False, 4)
+    main(11, 8, 8, False, False, 4)

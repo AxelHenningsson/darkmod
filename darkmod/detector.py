@@ -199,7 +199,6 @@ class Detector(object):
         magnification,
         sample_rotation=np.eye(3),
         sample_translation=np.zeros(3),
-        voxel_weights=None,
     ):
         """Backpropagate the pixel values of a detector image to the sample volume.
 
@@ -237,8 +236,8 @@ class Detector(object):
 
         projection_image = self._invert(detector_image)
 
-        normbp = self._projector.backproject(
-            np.ones_like(projection_image),
+        acc_backprojection = self._projector.backproject(
+            projection_image,
             voxel_volume_shape,
             magnified_voxel_size,
             ray_direction,
@@ -246,8 +245,13 @@ class Detector(object):
             sample_translation,
         )
 
-        acc_backprojection = self._projector.backproject(
-            projection_image,
+        # This part is needed due to the fact that the number of detector pixels
+        # that contribute to a voxel is not equal to 1 nor constant. Therefore,
+        # we need to normalize the backprojection by the number of pixels that
+        # contribute to each voxel. In general the detector will have more pixels
+        # than the sample has voxels, since we are simulating a magnified view.
+        normbp = self._projector.backproject(
+            np.ones_like(projection_image),
             voxel_volume_shape,
             magnified_voxel_size,
             ray_direction,
@@ -260,6 +264,7 @@ class Detector(object):
             normbp,
             where=normbp != 0,
         )
+        #
 
         return backprojection
 

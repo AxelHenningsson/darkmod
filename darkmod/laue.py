@@ -1,8 +1,8 @@
 """Collection of functions for solving time dependent Laue equations for arbitrary rigid body motions.
 This module is a modiefied version of what is found in the FABLE package `xrd_simulator` by Axel Henningsson.
 """
+
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 def get_G(U, B, G_hkl):
@@ -21,6 +21,7 @@ def get_G(U, B, G_hkl):
 
     """
     return np.dot(np.dot(U, B), G_hkl)
+
 
 def get_eta_angle(G, omega, energy, rotation_axis):
     """Compute a eta angle given a diffraction (scattering) vector.
@@ -44,9 +45,7 @@ def get_eta_angle(G, omega, energy, rotation_axis):
     wavelength = keV_to_angstrom(energy)
 
     rx, ry, rz = rotation_axis
-    K = np.array([[0, -rz, ry],
-                [rz, 0, -rx],
-                [-ry, rx, 0]])
+    K = np.array([[0, -rz, ry], [rz, 0, -rx], [-ry, rx, 0]])
     K2 = K.dot(K)
 
     wave_vector = 2 * np.pi * np.array([1, 0, 0]) / wavelength
@@ -54,17 +53,18 @@ def get_eta_angle(G, omega, energy, rotation_axis):
     eta = np.zeros_like(omega)
     for i in range(eta.shape[0]):
         for j in range(eta.shape[1]):
-            om = omega[i,j]
+            om = omega[i, j]
             if np.isnan(om):
-                eta[i,j] = np.nan
+                eta[i, j] = np.nan
             else:
                 Romega = np.eye(3, 3) + np.sin(om) * K + (1 - np.cos(om)) * K2
                 G_lab = Romega @ G[:, j]
                 k_lab = G_lab + wave_vector
                 kx, ky, kz = k_lab
-                eta[i,j] = -np.sign(ky)*np.arccos( kz / np.sqrt(ky**2 + kz**2) )
+                eta[i, j] = -np.sign(ky) * np.arccos(kz / np.sqrt(ky**2 + kz**2))
 
     return eta
+
 
 def get_bragg_angle(G, energy):
     """Compute a Bragg angle given a diffraction (scattering) vector.
@@ -79,6 +79,7 @@ def get_bragg_angle(G, energy):
     """
     wavelength = keV_to_angstrom(energy)
     return np.arcsin(np.linalg.norm(G, axis=0) * wavelength / (4 * np.pi))
+
 
 def get_b_matrix(unit_cell):
     """
@@ -98,17 +99,26 @@ def get_b_matrix(unit_cell):
     salp = np.sin(alpha)
     sbet = np.sin(beta)
     sgam = np.sin(gamma)
-    V = a*b*c*np.sqrt(1 - calp*calp - cbet*cbet - cgam*cgam + 2*calp*cbet*cgam)
-    astar = 2*np.pi*b*c*salp/V
-    bstar = 2*np.pi*a*c*sbet/V
-    cstar = 2*np.pi*a*b*sgam/V
-    sbetstar = V/(a*b*c*salp*sgam)
-    sgamstar = V/(a*b*c*salp*sbet)
-    cbetstar = (calp*cgam-cbet)/(salp*sgam)
-    cgamstar = (calp*cbet-cgam)/(salp*sbet)
-    B = np.array([[astar, bstar*cgamstar,  cstar*cbetstar      ],
-                 [0,     bstar*sgamstar, -cstar*sbetstar*calp ],
-                 [0,     0,               cstar*sbetstar*salp ]])
+    V = (
+        a
+        * b
+        * c
+        * np.sqrt(1 - calp * calp - cbet * cbet - cgam * cgam + 2 * calp * cbet * cgam)
+    )
+    astar = 2 * np.pi * b * c * salp / V
+    bstar = 2 * np.pi * a * c * sbet / V
+    cstar = 2 * np.pi * a * b * sgam / V
+    sbetstar = V / (a * b * c * salp * sgam)
+    sgamstar = V / (a * b * c * salp * sbet)
+    cbetstar = (calp * cgam - cbet) / (salp * sgam)
+    cgamstar = (calp * cbet - cgam) / (salp * sbet)
+    B = np.array(
+        [
+            [astar, bstar * cgamstar, cstar * cbetstar],
+            [0, bstar * sgamstar, -cstar * sbetstar * calp],
+            [0, 0, cstar * sbetstar * salp],
+        ]
+    )
     return B
 
 
@@ -125,11 +135,10 @@ def get_rotmat(rotation_axis, angle):
 
     """
     rx, ry, rz = rotation_axis
-    K = np.array([[0, -rz, ry],
-                [rz, 0, -rx],
-                [-ry, rx, 0]])
+    K = np.array([[0, -rz, ry], [rz, 0, -rx], [-ry, rx, 0]])
     K2 = K.dot(K)
     return np.eye(3, 3) + np.sin(angle) * K + (1 - np.cos(angle)) * K2
+
 
 def get_omega(U, cell, hkl, energy, rotation_axis):
     """
@@ -148,26 +157,25 @@ def get_omega(U, cell, hkl, energy, rotation_axis):
         omega (:obj:`numpy array`): The omega values for diffraction. `shape=(n,)`
     """
     B = get_b_matrix(cell)
-    G_0 = U@B@hkl
+    G_0 = U @ B @ hkl
     wavelength = keV_to_angstrom(energy)
 
     wave_vector = 2 * np.pi * np.array([1, 0, 0]) / wavelength
 
     rx, ry, rz = rotation_axis
-    K = np.array([[0, -rz, ry],
-                  [rz, 0, -rx],
-                  [-ry, rx, 0]])
+    K = np.array([[0, -rz, ry], [rz, 0, -rx], [-ry, rx, 0]])
     K2 = K.dot(K)
     rho_0_factor = -wave_vector.dot(K2)
     rho_1_factor = wave_vector.dot(K)
     rho_2_factor = wave_vector.dot(np.eye(3, 3) + K2)
     rho_0s = rho_0_factor.dot(G_0)
     rho_1s = rho_1_factor.dot(G_0)
-    rho_2s = rho_2_factor.dot(G_0) + np.sum((G_0 * G_0), axis=0) / 2.
+    rho_2s = rho_2_factor.dot(G_0) + np.sum((G_0 * G_0), axis=0) / 2.0
 
     omega = _solve_tan_half_angle_equation(rho_0s, rho_1s, rho_2s)
 
     return omega
+
 
 def angstrom_to_keV(wavelength):
     """Convert wavelength in angstrom to energy in KeV.
@@ -180,6 +188,7 @@ def angstrom_to_keV(wavelength):
     """
     return keV_to_angstrom(wavelength)
 
+
 def keV_to_angstrom(energy):
     """Cnnvert KeV energy to wavelength in angstrom.
 
@@ -190,9 +199,31 @@ def keV_to_angstrom(energy):
         wavelength (:obj:`float`): wavelength in units of angstrom.
     """
     h = 6.62607015 * 1e-34
-    c = 299792458.
+    c = 299792458.0
     eV_to_joules = 1.60217663 * 1e-19
     return 1e10 * (h * c) / (energy * 1e3 * eV_to_joules)
+
+
+def refractive_decrement(Z, rho, A, energy):
+    """calculate refractive decrement of a material
+
+    Args:
+        Z (:obj:`int`): atomic number
+        rho (:obj:`float`): density, unit: g/cm^3
+        A (:obj:`float`): atomic mass number, unit: g/mol
+        energy (:obj:`float`): energy, unit: keV
+
+    Returns:
+        :obj:`float`: refractive decrement
+
+    """
+    wavelength = keV_to_angstrom(energy)  # unit: angstrom
+    r0 = 2.8179403227 * 1e-15  # classical electron radius, unit: m
+    Na = 6.02214076 * 10 ** (23)  # Avogadro's number, unit: mol^-1
+    Ne = rho * Na * Z / A  # electron density, unit: cm^-3
+    si_unit_scale = 1e-14
+    return si_unit_scale * Ne * (wavelength**2) * r0 / (2 * np.pi)  # unit: 1
+
 
 def _solve_tan_half_angle_equation(rho_0, rho_1, rho_2):
     """Find all solutions, :obj:`t`, to the equation (maximum 2 solutions exists)
@@ -230,35 +261,41 @@ def _solve_tan_half_angle_equation(rho_0, rho_1, rho_2):
 
     m = np.abs(denominator) < 1e-12
     denominator[m] = 0
-    a = np.divide(rho_1, denominator, out=np.full_like(rho_0, np.nan), where=denominator!=0)
-    b = np.divide(rho_0 + rho_2, denominator, out=np.full_like(rho_0, np.nan), where=denominator!=0)
+    a = np.divide(
+        rho_1, denominator, out=np.full_like(rho_0, np.nan), where=denominator != 0
+    )
+    b = np.divide(
+        rho_0 + rho_2,
+        denominator,
+        out=np.full_like(rho_0, np.nan),
+        where=denominator != 0,
+    )
 
     # handle loss of numerical precision case
-    m = np.abs(rho_0 + rho_2)<1e-12
+    m = np.abs(rho_0 + rho_2) < 1e-12
     b[m] = 0
 
     rootval = a**2 - b
 
     leadingterm = -a
-    rootval[rootval<0] = np.nan
+    rootval[rootval < 0] = np.nan
     s1 = leadingterm + np.sqrt(rootval)
     s2 = leadingterm - np.sqrt(rootval)
     om1 = 2 * np.arctan(s1)
     om2 = 2 * np.arctan(s2)
 
-
     # handle single solution case
-    m1 = (np.abs(rho_0 - rho_2)<1e-12)*(np.abs(rho_1)>1e-12)
-    m2 = (np.abs(rho_0 - rho_2)<1e-12)*(np.abs(rho_1)<1e-12)
+    m1 = (np.abs(rho_0 - rho_2) < 1e-12) * (np.abs(rho_1) > 1e-12)
+    m2 = (np.abs(rho_0 - rho_2) < 1e-12) * (np.abs(rho_1) < 1e-12)
     om1[m1] = 2 * np.arctan(-rho_0[m1] / rho_1[m1])
     om1[m2] = np.pi
     om2[m1] = np.nan
     om2[m2] = np.nan
 
-    om1[ om1<0] += 2*np.pi
-    om2[ om2<0] += 2*np.pi
+    om1[om1 < 0] += 2 * np.pi
+    om2[om2 < 0] += 2 * np.pi
 
-    om2[ (om1==0)*(om2==0) ] += 2*np.pi
+    om2[(om1 == 0) * (om2 == 0)] += 2 * np.pi
 
     return np.array([om1, om2])
 
