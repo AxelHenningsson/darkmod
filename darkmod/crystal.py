@@ -524,7 +524,7 @@ class Crystal(object):
         """
 
         x_lab = self._get_x_lab_flat()  # 20 %
-  
+
         if spatial_artefact:
             angular_crl_shifts = crl.get_angular_shifts(x_lab)
         else:
@@ -539,7 +539,7 @@ class Crystal(object):
         w = beam(x_lab)  # 20 %
         voxel_volume = (p_Q * w).reshape(self._grid_scalar_shape)
 
-        image = detector.render(
+        image = detector.readout(
             # self._prune_volume(voxel_volume),
             voxel_volume,
             self.voxel_size,

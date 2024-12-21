@@ -77,9 +77,9 @@ def main(
     crl.goto(theta, eta)
 
     # Discretize the crystal
-    xg = np.linspace(-7, 7, 33 * factor + 1)  # microns
-    yg = np.linspace(-7, 7, 33 * factor + 1)  # microns
-    zg = np.linspace(-7, 7, 33 * factor + 1)  # microns
+    xg = np.linspace(-12, 12, 33 * factor + 1)  # microns
+    yg = np.linspace(-12, 12, 33 * factor + 1)  # microns
+    zg = np.linspace(-12, 12, 33 * factor + 1)  # microns
 
     if 1:
         beam = GaussianLineBeam(z_std=0.1, energy=energy)  # 100 nm = 0.1 microns
@@ -171,9 +171,7 @@ def main(
     # Detector size
     det_row_count = 256
     det_col_count = 256
-    pixel_size = (
-        crl.magnification * dx * 0.17
-    )  # this will split the phi chi over seevral pixels....
+    pixel_size = 3.75  # this will split the phi chi over seevral pixels....
     print("pixel_size", pixel_size)
     print("voxel_size", crystal.voxel_size)
 
@@ -193,7 +191,16 @@ def main(
         resolution_function,
         spatial_artefact,
         detector_noise,
+        normalize=False,
     )
+
+    
+
+    # f = np.sum(strain_mosa, axis=(0, 1))
+    # print("")
+    # print("np.sum(f>0) / f.size", np.sum(f > 0) / f.size)
+    # print("")
+    # raise
 
     # print("Subtracting background...")
     background = np.median(strain_mosa[:, 0:5, :, :]).astype(np.uint16)
@@ -324,7 +331,13 @@ def main(
 
     print("Total time is", time.perf_counter() - t1)
 
-    if 0:
+    if 1:
+        plt.style.use("dark_background")
+        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+        im = ax.imshow(strain_mosa[:, :, 5, 11, 11])
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+
         fig, ax = plt.subplots(1, 3, figsize=(16, 6), sharex=True, sharey=True)
         _mu = crop(mu, mask)
         for i in range(3):
@@ -428,6 +441,11 @@ def main(
         plt.show()
 
 
+# 7.5 microns chip sized voxels
+# comes in 2x and 10x magnifications
+# so effectively 0.75 or 3.75 micron
+# pixels is what we want.
+
 if __name__ == "__main__":
     # ntheta,
     # nphi,
@@ -436,4 +454,4 @@ if __name__ == "__main__":
     # detector_noise=False,
     # factor=2,
 
-    main(11, 8, 8, False, False, 4)
+    main(11, 21, 21, False, False, 1)

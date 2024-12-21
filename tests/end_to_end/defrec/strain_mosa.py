@@ -32,10 +32,13 @@ def main(
     nphi,
     nchi,
     zi,
-    spatial_artefact=False,
-    detector_noise=False,
-    plot=False,
-    factor=8,
+    spatial_artefact,
+    plot,
+    factor,
+    exposure,
+    dynamic_range,
+    psf_width,
+    noise,
 ):
     number_of_lenses = 69
     lens_space = 1600  # microns
@@ -124,9 +127,9 @@ def main(
 
     # Discretize the crystal
     _adder = int(factor % 2 == 0)
-    xg = np.linspace(-7, 7, 33 * factor + _adder)  # microns
-    yg = np.linspace(-7, 7, 33 * factor + _adder)  # microns
-    zg = np.linspace(-7, 7, 33 * factor + _adder)  # microns
+    xg = np.linspace(-5, 5, 33 * factor + _adder)  # microns
+    yg = np.linspace(-5, 5, 33 * factor + _adder)  # microns
+    zg = np.linspace(-5, 5, 33 * factor + _adder)  # microns
 
     if 1:
         beam = GaussianLineBeam(z_std=0.1, energy=energy)  # 100 nm = 0.1 microns
@@ -166,11 +169,10 @@ def main(
 
     crystal.goniometer.translation = np.array([0, 0, (zg[1] - zg[0]) * zi])
 
-    dx = factor * (xg[1] - xg[0])
     X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
 
     # print("zg ", zg)
-    # print("dx ", dx)
+    # print("voxelsize ", (xg[1] - xg[0]))
     # print("beam.z_std ", beam.z_std)
     # print("X.shape ", X.shape)
     # print("X.size ", X.size)
@@ -189,8 +191,8 @@ def main(
 
     crystal.discretize(X, Y, Z, defgrad)
 
-    #crystal.write("straight_edge_dislocation")
-    #raise
+    # crystal.write("straight_edge_dislocation")
+    # raise
 
     Q_lab = crystal.goniometer.R @ crystal.UB_0 @ hkl
     d_0 = (2 * np.pi) / np.linalg.norm(Q_lab)
@@ -229,14 +231,20 @@ def main(
     resolution_function.compile()
 
     # Detector size
-    det_row_count = 256
-    det_col_count = 256
-    pixel_size = (
-        crl.magnification * dx * 0.17
-    )  # this will split the phi chi over seevral pixels....
+    det_row_count = 272
+    det_col_count = 272
+    pixel_size = 0.75
 
     detector = Detector.orthogonal_mount(
-        crl, pixel_size, det_row_count, det_col_count, super_sampling=1
+        crl,
+        pixel_size,
+        det_row_count,
+        det_col_count,
+        super_sampling=1,
+        exposure=exposure,
+        dynamic_range=dynamic_range,
+        psf_width=psf_width,
+        noise=noise,
     )
 
     # beam = HeavysideBeam(y_width=1e8, z_width = zg[1] - zg[0], energy=energy)
@@ -268,17 +276,34 @@ def main(
         beam,
         resolution_function,
         spatial_artefact,
-        detector_noise,
     )
+
+    # plt.style.use("dark_background")
+    # fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+    # im = ax.imshow(strain_mosa[..., 1, 1, 1], cmap="plasma")
+    # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    # plt.tight_layout()
+    # plt.show()
+
+    # print("Volume shape : ", X.shape)
+    # print("Max count in scan is : ", np.max(strain_mosa))
+    # print("Min count in scan is : ", np.min(strain_mosa))
+    # print("Number of saturated pixels : ", np.sum(strain_mosa == dynamic_range))
+    # print(
+    #     "Fraction of saturated pixels : ",
+    #     np.sum(strain_mosa == dynamic_range) / strain_mosa.size,
+    # )
 
     # raise ValueError("STOP HERE")
     # # TODO: lets investigate the aliasing artefacts.
 
     # print("Subtracting background...")
+    saturated_pixels_mask = strain_mosa == 64000
     background = np.median(strain_mosa[:, 0:5, :, :]).astype(np.uint16)
     # print("background", background)
     strain_mosa.clip(background, out=strain_mosa)
     strain_mosa -= background
+    strain_mosa[saturated_pixels_mask] = 64000
 
     mask = np.sum(strain_mosa, axis=(-1, -2, -3))
     # fig, ax = plt.subplots(1, 1, figsize=(7,7))
@@ -422,9 +447,19 @@ def main(
             translation=crystal.goniometer.translation,
             zi=zi,
             intensity_mask=mask,
+            exposure=exposure,
+            dynamic_range=dynamic_range,
+            psf_width=psf_width,
+            noise=noise,
         )
 
     if plot:
+        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+        im = ax.imshow(mask)
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        plt.title("Intensity mask")
+        plt.tight_layout()
+
         plt.style.use("dark_background")
         fig, ax = plt.subplots(1, 1, figsize=(7, 7))
         title_str = (
@@ -562,17 +597,49 @@ if __name__ == "__main__":
     nchi = 41
     factor = 8
 
+    # 5.83 : 9
+    # 9.474 : 11
+    # 18.917 : 17
+    # 37.82 : 27
+
+    if factor == 1:
+        maxval = 8.459398
+    elif factor == 2:
+        maxval = 13.730573
+    elif factor == 4:
+        maxval = 27.416029
+    elif factor == 8:
+        maxval = 54.82392
+
+    # 1 : 0.69 * _c
+    # 2 : 0.96 * _c
+    # 3 : 0.69 * _c
+    # 4 : 0.96 * _c
+
+    exposure = 0.98 * 64000 / maxval
+    dynamic_range = 64000
+    psf_width = 1
+    noise = True
+    plot = False
+
+    base = "/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves/"
+    save_dir = base + "paper_1_run_3"
+    # save_dir = None
+
     profile = False
     z_steps = [-1, 0, 1]
     # z_steps = [0]
-    # reflections = [1, 2, 3, 4]
-    # reflections = [1, 2]
+
+    #z_steps = [0]
+    #reflections = [2]
+
+    #reflections = [1, 2]
     reflections = [3, 4]
 
-    pr = cProfile.Profile()
-    pr.enable()
+    # pr = cProfile.Profile()
+    # pr.enable()
 
-    for reflection in reflections:
+    for ri, reflection in enumerate(reflections):
         print("\n\n######## REFLECTION " + str(reflection) + " ##########")
         tc = 0
         for zi in z_steps:
@@ -583,16 +650,19 @@ if __name__ == "__main__":
                 pr.enable()
 
             main(
-                savedir="/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves/high_res",
+                savedir=save_dir,
                 reflection=reflection,
                 ntheta=ntheta,
                 nphi=nphi,
                 nchi=nchi,
                 zi=zi,
                 spatial_artefact=False,
-                detector_noise=False,
-                plot=False,
+                plot=plot,
                 factor=factor,
+                exposure=exposure,
+                dynamic_range=dynamic_range,
+                psf_width=psf_width,
+                noise=noise,
             )
 
             if profile:
@@ -612,7 +682,7 @@ if __name__ == "__main__":
             tc += t2 - t1
         print("Total time for reflection " + str(reflection) + " is: " + str(tc) + " s")
 
-    pr.disable()
-    pr.dump_stats("tmp_profile_dump")
-    ps = pstats.Stats("tmp_profile_dump").strip_dirs().sort_stats("cumtime")
-    ps.print_stats(15)
+    # pr.disable()
+    # pr.dump_stats("tmp_profile_dump")
+    # ps = pstats.Stats("tmp_profile_dump").strip_dirs().sort_stats("cumtime")
+    # ps.print_stats(15)

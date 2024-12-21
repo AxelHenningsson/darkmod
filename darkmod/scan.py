@@ -124,8 +124,6 @@ def theta_phi_chi(
     beam,
     resolution_function,
     spatial_artefact=True,
-    detector_noise=True,
-    normalize=True,
 ):
     """
     Simulate a strain-mosaicity scan over theta, phi, and chi angles.
@@ -151,10 +149,6 @@ def theta_phi_chi(
         beam (:obj:`darkmod.beam.Beam`): Beam object representing the incident X-ray beam.
         resolution_function (:obj:`darkmod.resolution`): Function defining the resolution function in Q-space.
         spatial_artefact (:obj:`bool`): Simulate spatial artifacts due to optical axis offset. Defaults to True.
-        detector_noise (:obj:`bool`): If True, adds noise to the simulated detector data. Defaults to True.
-        normalize (:obj:`bool`): If True, normalizes the diffraction pattern to the camera's range. Defaults to True.
-            This will device all frames with the maximum value of the stack and multiply by 64000. It implies that
-            rounding and conversion to uint16 will be performed.
 
     Returns:
         image_stack (:obj:`numpy array`): A 5D array representing the diffraction signal over the scanned
@@ -175,7 +169,8 @@ def theta_phi_chi(
             len(delta_theta_values),  # Number of theta angle steps
             len(phi_values),  # Number of phi angle steps
             len(chi_values),  # Number of chi angle steps
-        )
+        ),
+        dtype=detector.dtype,
     )
 
     # Iterate over all combinations of theta, phi, and chi angles
@@ -201,7 +196,6 @@ def theta_phi_chi(
                     detector,
                     beam,
                     spatial_artefact=spatial_artefact,
-                    
                 )
 
     # Reset the CRL, resolution function, and goniometer to the original angles
@@ -214,10 +208,6 @@ def theta_phi_chi(
         phi0,
         chi0,
     )
-
-    # Normalize the diffraction pattern to (approximately) the camera's range
-    if normalize:
-        image_stack = _normalize_image_stack(image_stack, detector_noise, detector)
 
     return image_stack
 
@@ -264,16 +254,15 @@ def _normalize_image_stack(image_stack, detector_noise, detector):
         (:obj:`numpy array`): The normalized and noise-added diffraction pattern, rounded to 16-bit unsigned integers.
     """
 
-    # Normalize the diffraction pattern to use (approximately) the camera's full range (uint16)
-    image_stack /= np.max(image_stack)
-    image_stack *= 64000
-    if detector_noise:
-        # Add simulated detector noise if specified
-        image_stack = detector.noise(image_stack)
+    norm_stack = image_stack * 64000 / image_stack.max(image_stack)
+    noise = detector.noise(norm_stack) if detector_noise else 0
 
-        # Rescale such that np.max(image_stack)==64000
-        image_stack /= np.max(image_stack)
-        image_stack *= 64000
+    # Normalize the diffraction pattern to use (approximately) the camera's full range (uint16)
+    image_stack = image_stack / image_stack.max(image_stack)
+    image_stack = image_stack * (64000 - np.max(noise))
+
+    # Add simulated detector noise if specifieddetector.noise(image_stack)
+    image_stack = image_stack + noise
 
     # Round values and convert to 16-bit unsigned integers for the camera format
     image_stack = image_stack.round(out=image_stack).astype(np.uint16, copy=False)
