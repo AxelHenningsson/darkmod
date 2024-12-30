@@ -114,11 +114,11 @@ def main(
         phimax = 0.35
         chimax = 2.3
     elif reflection == 4:
-        hkl = np.array([-1.0, 1.0, 3.0])
-        crystal.goniometer.omega = np.radians(96.431585)
+        hkl = np.array([1.0, -1.0, 3.0])
+        crystal.goniometer.omega = np.radians(276.431585)
         thmax = 0.7
         phimax = 2.3
-        chimax = 0.65
+        chimax = 0.35
 
     eta = np.radians(20.232593)
     theta = np.radians(15.416837)
@@ -191,7 +191,7 @@ def main(
 
     crystal.discretize(X, Y, Z, defgrad)
 
-    # crystal.write("straight_edge_dislocation")
+    # crystal.write("/home/naxhe/tmp/straight_edge_dislocation")
     # raise
 
     Q_lab = crystal.goniometer.R @ crystal.UB_0 @ hkl
@@ -285,14 +285,14 @@ def main(
     # plt.tight_layout()
     # plt.show()
 
-    # print("Volume shape : ", X.shape)
-    # print("Max count in scan is : ", np.max(strain_mosa))
-    # print("Min count in scan is : ", np.min(strain_mosa))
-    # print("Number of saturated pixels : ", np.sum(strain_mosa == dynamic_range))
-    # print(
-    #     "Fraction of saturated pixels : ",
-    #     np.sum(strain_mosa == dynamic_range) / strain_mosa.size,
-    # )
+    print("Volume shape : ", X.shape)
+    print("Max count in scan is : ", np.max(strain_mosa))
+    print("Min count in scan is : ", np.min(strain_mosa))
+    print("Number of saturated pixels : ", np.sum(strain_mosa == dynamic_range))
+    print(
+        "Fraction of saturated pixels : ",
+        np.sum(strain_mosa == dynamic_range) / strain_mosa.size,
+    )
 
     # raise ValueError("STOP HERE")
     # # TODO: lets investigate the aliasing artefacts.
@@ -588,6 +588,22 @@ def main(
         fig1.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
         plt.tight_layout()
 
+        theta_mesh, phi_mesh = np.meshgrid(theta_values, phi_values, indexing="ij")
+        support = np.sum(strain_mosa, axis=(0, 1))[:, :, len(chi_values) // 2]
+        fig1, ax1 = plt.subplots(1, 1, figsize=(10, 8))
+        ax1.set_title("$\\theta$-$\chi$ Log-Sparsity Scan Pattern")
+        im = ax1.pcolormesh(
+            theta_mesh * 1e3,
+            phi_mesh * 1e3,
+            np.log(support.clip(1)),
+            cmap="plasma",
+            edgecolors="black",
+        )
+        ax1.set_xlabel("$\\theta$ [mrad]")
+        ax1.set_ylabel("$\phi$ [mrad]")
+        fig1.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+
         plt.show()
 
 
@@ -626,15 +642,15 @@ if __name__ == "__main__":
     save_dir = base + "paper_1_run_3"
     # save_dir = None
 
-    profile = False
+    profile = True
     z_steps = [-1, 0, 1]
     # z_steps = [0]
 
-    #z_steps = [0]
-    #reflections = [2]
+    # z_steps = [0]
+    # reflections = [2]
 
-    #reflections = [1, 2]
-    reflections = [3, 4]
+    reflections = [1, 2]
+    #reflections = [3, 4]
 
     # pr = cProfile.Profile()
     # pr.enable()

@@ -1,0 +1,1155 @@
+Dec 30 early morning.
+
+(xrd) naxhe@CME-EX-NAXHE1:~/workspace/darkmod/tests/end_to_end/defrec$ python strain_mosa.py
+
+
+######## REFLECTION 1 ##########
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63460
+Min count in scan is :  85
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 01:45:36 2024    tmp_profile_dump
+
+         3027128 function calls (3027118 primitive calls) in 3537.873 seconds
+
+   Ordered by: cumulative time
+   List reduced from 351 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1   14.654   14.654 3537.873 3537.873 strain_mosa.py:28(main)
+        1   62.457   62.457 3503.591 3503.591 scan.py:116(theta_phi_chi)
+    18491   55.548    0.003 3441.020    0.186 crystal.py:502(diffract)
+    18491    0.400    0.000 1473.843    0.080 resolution.py:508(__call__)
+    18491  562.331    0.030 1473.419    0.080 distribution.py:346(__call__)
+    18491  698.510    0.038  911.088    0.049 distribution.py:383(_log_mult_gauss_pdf)
+    18492    0.354    0.000  652.477    0.035 beam.py:106(__call__)
+    18492  395.368    0.021  652.123    0.035 distribution.py:125(__call__)
+    18491    1.753    0.000  540.260    0.029 detector.py:173(readout)
+    18491  534.847    0.029  537.298    0.029 crystal.py:88(_get_x_lab_flat)
+    18495    0.401    0.000  452.086    0.024 detector.py:228(render)
+    18495    0.157    0.000  451.440    0.024 projector.py:47(__call__)
+    18495    0.417    0.000  451.257    0.024 projector.py:162(_project)
+    18495    0.555    0.000  447.622    0.024 creators.py:417(create_sino3d_gpu)
+    37014  348.150    0.009  348.150    0.009 data3d.py:31(create)
+
+
+Done with zi=-1,  in:  3538.07 s
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63357
+Min count in scan is :  85
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 02:47:28 2024    tmp_profile_dump
+
+         3027112 function calls in 3711.706 seconds
+
+   Ordered by: cumulative time
+   List reduced from 347 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1   11.653   11.653 3711.706 3711.706 strain_mosa.py:28(main)
+        1   62.630   62.630 3677.785 3677.785 scan.py:116(theta_phi_chi)
+    18491   57.547    0.003 3615.027    0.196 crystal.py:502(diffract)
+    18491    0.467    0.000 1537.980    0.083 resolution.py:508(__call__)
+    18491  583.714    0.032 1537.484    0.083 distribution.py:346(__call__)
+    18491  717.932    0.039  953.771    0.052 distribution.py:383(_log_mult_gauss_pdf)
+    18492    0.403    0.000  676.845    0.037 beam.py:106(__call__)
+    18492  410.206    0.022  676.441    0.037 distribution.py:125(__call__)
+    18491  616.992    0.033  619.510    0.034 crystal.py:88(_get_x_lab_flat)
+    18491    1.852    0.000  487.364    0.026 detector.py:173(readout)
+    18495    0.442    0.000  395.240    0.021 detector.py:228(render)
+    18495    0.156    0.000  394.529    0.021 projector.py:47(__call__)
+    18495    0.429    0.000  394.344    0.021 projector.py:162(_project)
+    18495    0.561    0.000  390.621    0.021 creators.py:417(create_sino3d_gpu)
+    37014  273.420    0.007  273.420    0.007 data3d.py:31(create)
+
+
+Done with zi=0,  in:  3712.12 s
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63459
+Min count in scan is :  85
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 03:48:40 2024    tmp_profile_dump
+
+         3027112 function calls in 3672.192 seconds
+
+   Ordered by: cumulative time
+   List reduced from 347 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1   11.628   11.628 3672.192 3672.192 strain_mosa.py:28(main)
+        1   62.008   62.008 3641.054 3641.054 scan.py:116(theta_phi_chi)
+    18491   57.588    0.003 3578.933    0.194 crystal.py:502(diffract)
+    18491    0.464    0.000 1520.634    0.082 resolution.py:508(__call__)
+    18491  585.023    0.032 1520.146    0.082 distribution.py:346(__call__)
+    18491  704.290    0.038  935.123    0.051 distribution.py:383(_log_mult_gauss_pdf)
+    18492    0.369    0.000  674.094    0.036 beam.py:106(__call__)
+    18492  409.811    0.022  673.725    0.036 distribution.py:125(__call__)
+    18491  611.067    0.033  613.639    0.033 crystal.py:88(_get_x_lab_flat)
+    18491    1.853    0.000  479.879    0.026 detector.py:173(readout)
+    18495    0.449    0.000  388.236    0.021 detector.py:228(render)
+    18495    0.152    0.000  387.523    0.021 projector.py:47(__call__)
+    18495    0.430    0.000  387.342    0.021 projector.py:162(_project)
+    18495    0.560    0.000  383.514    0.021 creators.py:417(create_sino3d_gpu)
+    37014  271.691    0.007  271.691    0.007 data3d.py:31(create)
+
+
+Done with zi=1,  in:  3672.39 s
+Total time for reflection 1 is: 10922.581604594998 s
+
+
+######## REFLECTION 2 ##########
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63529
+Min count in scan is :  84
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 04:51:38 2024    tmp_profile_dump
+
+         3027098 function calls in 3777.848 seconds
+
+   Ordered by: cumulative time
+   List reduced from 347 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1   26.199   26.199 3777.848 3777.848 strain_mosa.py:28(main)
+        1   61.531   61.531 3728.720 3728.720 scan.py:116(theta_phi_chi)
+    18491   63.100    0.003 3667.066    0.198 crystal.py:502(diffract)
+    18491    0.454    0.000 1651.395    0.089 resolution.py:508(__call__)
+    18491  740.570    0.040 1650.917    0.089 distribution.py:346(__call__)
+    18491  686.427    0.037  910.347    0.049 distribution.py:383(_log_mult_gauss_pdf)
+    18492    0.339    0.000  651.206    0.035 beam.py:106(__call__)
+    18492  401.664    0.022  650.867    0.035 distribution.py:125(__call__)
+    18491  597.063    0.032  599.520    0.032 crystal.py:88(_get_x_lab_flat)
+    18491    1.815    0.000  469.601    0.025 detector.py:173(readout)
+    18495    0.424    0.000  382.627    0.021 detector.py:228(render)
+    18495    0.146    0.000  381.934    0.021 projector.py:47(__call__)
+    18495    0.432    0.000  381.760    0.021 projector.py:162(_project)
+    18495    0.592    0.000  378.063    0.020 creators.py:417(create_sino3d_gpu)
+    37014  266.805    0.007  266.805    0.007 data3d.py:31(create)
+
+
+Done with zi=-1,  in:  3778.26 s
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63489
+Min count in scan is :  86
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 05:55:16 2024    tmp_profile_dump
+
+         3027098 function calls in 3817.570 seconds
+
+   Ordered by: cumulative time
+   List reduced from 347 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1   24.944   24.944 3817.570 3817.570 strain_mosa.py:28(main)
+        1   61.918   61.918 3763.942 3763.942 scan.py:116(theta_phi_chi)
+    18491   64.697    0.003 3701.910    0.200 crystal.py:502(diffract)
+    18491    0.442    0.000 1665.294    0.090 resolution.py:508(__call__)
+    18491  751.347    0.041 1664.824    0.090 distribution.py:346(__call__)
+    18491  689.190    0.037  913.477    0.049 distribution.py:383(_log_mult_gauss_pdf)
+    18492    0.343    0.000  661.300    0.036 beam.py:106(__call__)
+    18492  408.813    0.022  660.956    0.036 distribution.py:125(__call__)
+    18491  599.865    0.032  602.402    0.033 crystal.py:88(_get_x_lab_flat)
+    18491    1.869    0.000  476.858    0.026 detector.py:173(readout)
+    18495    0.444    0.000  389.001    0.021 detector.py:228(render)
+    18495    0.145    0.000  388.286    0.021 projector.py:47(__call__)
+    18495    0.441    0.000  388.111    0.021 projector.py:162(_project)
+    18495    0.581    0.000  384.346    0.021 creators.py:417(create_sino3d_gpu)
+    37014  269.307    0.007  269.307    0.007 data3d.py:31(create)
+
+
+Done with zi=0,  in:  3817.97 s
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63535
+Min count in scan is :  85
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 06:59:59 2024    tmp_profile_dump
+
+         3027098 function calls in 3882.437 seconds
+
+   Ordered by: cumulative time
+   List reduced from 347 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    9.662    9.662 3882.437 3882.437 strain_mosa.py:28(main)
+        1   59.050   59.050 3856.472 3856.472 scan.py:116(theta_phi_chi)
+    18491   60.835    0.003 3797.305    0.205 crystal.py:502(diffract)
+    18491    0.471    0.000 1591.508    0.086 resolution.py:508(__call__)
+    18491  707.005    0.038 1591.013    0.086 distribution.py:346(__call__)
+    18491  661.902    0.036  884.008    0.048 distribution.py:383(_log_mult_gauss_pdf)
+    18491    1.758    0.000  733.885    0.040 detector.py:173(readout)
+    18495    0.394    0.000  650.676    0.035 detector.py:228(render)
+    18495    0.148    0.000  650.022    0.035 projector.py:47(__call__)
+    18495    0.448    0.000  649.845    0.035 projector.py:162(_project)
+    18495    0.584    0.000  646.131    0.035 creators.py:417(create_sino3d_gpu)
+    18492    0.381    0.000  626.776    0.034 beam.py:106(__call__)
+    18492  386.659    0.021  626.395    0.034 distribution.py:125(__call__)
+    18491  560.265    0.030  562.587    0.030 crystal.py:88(_get_x_lab_flat)
+    18507  390.608    0.021  390.608    0.021 algorithm.py:38(run)
+
+
+Done with zi=1,  in:  3882.63 s
+Total time for reflection 2 is: 11478.860646018005 s
+(xrd) naxhe@CME-EX-NAXHE1:~/workspace/darkmod/tests/end_to_end/defrec$ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+xrd) naxhe@CME-EX-NAXHE1:~/workspace/darkmod/tests/end_to_end/defrec$ python strain_mosa.py 
+
+
+######## REFLECTION 3 ##########
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63831
+Min count in scan is :  85
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 01:45:50 2024    tmp_profile_dump
+
+         3027128 function calls (3027118 primitive calls) in 3562.357 seconds
+
+   Ordered by: cumulative time
+   List reduced from 351 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1   10.269   10.269 3562.357 3562.357 strain_mosa.py:28(main)
+        1   63.118   63.118 3529.416 3529.416 scan.py:116(theta_phi_chi)
+    18491   54.453    0.003 3466.172    0.187 crystal.py:502(diffract)
+    18491    0.418    0.000 1504.190    0.081 resolution.py:508(__call__)
+    18491  567.724    0.031 1503.741    0.081 distribution.py:346(__call__)
+    18491  705.505    0.038  936.016    0.051 distribution.py:383(_log_mult_gauss_pdf)
+    18492    0.363    0.000  656.134    0.035 beam.py:106(__call__)
+    18492  399.539    0.022  655.771    0.035 distribution.py:125(__call__)
+    18491  539.709    0.029  542.044    0.029 crystal.py:88(_get_x_lab_flat)
+    18491    1.515    0.000  528.316    0.029 detector.py:173(readout)
+    18495    0.406    0.000  440.199    0.024 detector.py:228(render)
+    18495    0.153    0.000  439.553    0.024 projector.py:47(__call__)
+    18495    0.400    0.000  439.373    0.024 projector.py:162(_project)
+    18495    0.529    0.000  435.793    0.024 creators.py:417(create_sino3d_gpu)
+    37014  335.419    0.009  335.419    0.009 data3d.py:31(create)
+
+
+Done with zi=-1,  in:  3562.67 s
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63927
+Min count in scan is :  84
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 02:47:10 2024    tmp_profile_dump
+
+         3027112 function calls in 3680.313 seconds
+
+   Ordered by: cumulative time
+   List reduced from 347 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1   16.627   16.627 3680.313 3680.313 strain_mosa.py:28(main)
+        1   62.024   62.024 3639.849 3639.849 scan.py:116(theta_phi_chi)
+    18491   56.729    0.003 3577.703    0.193 crystal.py:502(diffract)
+    18491    0.435    0.000 1516.540    0.082 resolution.py:508(__call__)
+    18491  575.453    0.031 1516.082    0.082 distribution.py:346(__call__)
+    18491  708.557    0.038  940.629    0.051 distribution.py:383(_log_mult_gauss_pdf)
+    18492    0.436    0.000  654.882    0.035 beam.py:106(__call__)
+    18492  406.088    0.022  654.446    0.035 distribution.py:125(__call__)
+    18491  614.225    0.033  616.646    0.033 crystal.py:88(_get_x_lab_flat)
+    18491    1.574    0.000  496.648    0.027 detector.py:173(readout)
+    18495    0.436    0.000  406.366    0.022 detector.py:228(render)
+    18495    0.149    0.000  405.672    0.022 projector.py:47(__call__)
+    18495    0.393    0.000  405.495    0.022 projector.py:162(_project)
+    18495    0.543    0.000  401.633    0.022 creators.py:417(create_sino3d_gpu)
+    37014  285.202    0.008  285.202    0.008 data3d.py:31(create)
+
+
+Done with zi=0,  in:  3680.53 s
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63730
+Min count in scan is :  85
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 03:48:40 2024    tmp_profile_dump
+
+         3027112 function calls in 3689.269 seconds
+
+   Ordered by: cumulative time
+   List reduced from 347 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1   15.674   15.674 3689.269 3689.269 strain_mosa.py:28(main)
+        1   61.642   61.642 3652.122 3652.122 scan.py:116(theta_phi_chi)
+    18491   57.132    0.003 3590.360    0.194 crystal.py:502(diffract)
+    18491    0.437    0.000 1527.505    0.083 resolution.py:508(__call__)
+    18491  585.777    0.032 1527.045    0.083 distribution.py:346(__call__)
+    18491  708.253    0.038  941.268    0.051 distribution.py:383(_log_mult_gauss_pdf)
+    18492    0.364    0.000  663.504    0.036 beam.py:106(__call__)
+    18492  413.337    0.022  663.139    0.036 distribution.py:125(__call__)
+    18491  612.444    0.033  614.942    0.033 crystal.py:88(_get_x_lab_flat)
+    18491    1.573    0.000  493.693    0.027 detector.py:173(readout)
+    18495    0.412    0.000  402.788    0.022 detector.py:228(render)
+    18495    0.160    0.000  402.116    0.022 projector.py:47(__call__)
+    18495    0.410    0.000  401.927    0.022 projector.py:162(_project)
+    18495    0.547    0.000  398.144    0.022 creators.py:417(create_sino3d_gpu)
+    37014  286.395    0.008  286.395    0.008 data3d.py:31(create)
+
+
+Done with zi=1,  in:  3689.47 s
+Total time for reflection 3 is: 10932.656009729002 s
+
+
+######## REFLECTION 4 ##########
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63638
+Min count in scan is :  85
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 04:49:02 2024    tmp_profile_dump
+
+         3027112 function calls in 3621.639 seconds
+
+   Ordered by: cumulative time
+   List reduced from 347 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1   22.396   22.396 3621.639 3621.639 strain_mosa.py:28(main)
+        1   61.143   61.143 3573.683 3573.683 scan.py:116(theta_phi_chi)
+    18491   56.301    0.003 3512.412    0.190 crystal.py:502(diffract)
+    18491    0.456    0.000 1492.105    0.081 resolution.py:508(__call__)
+    18491  578.646    0.031 1491.620    0.081 distribution.py:346(__call__)
+    18491  688.518    0.037  912.974    0.049 distribution.py:383(_log_mult_gauss_pdf)
+    18492    0.365    0.000  651.617    0.035 beam.py:106(__call__)
+    18492  407.416    0.022  651.252    0.035 distribution.py:125(__call__)
+    18491  593.957    0.032  596.440    0.032 crystal.py:88(_get_x_lab_flat)
+    18491    1.519    0.000  485.457    0.026 detector.py:173(readout)
+    18495    0.418    0.000  397.895    0.022 detector.py:228(render)
+    18495    0.159    0.000  397.209    0.021 projector.py:47(__call__)
+    18495    0.409    0.000  397.017    0.021 projector.py:162(_project)
+    18495    0.540    0.000  393.234    0.021 creators.py:417(create_sino3d_gpu)
+    37014  280.914    0.008  280.914    0.008 data3d.py:31(create)
+
+
+Done with zi=-1,  in:  3622.09 s
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63793
+Min count in scan is :  86
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 05:49:43 2024    tmp_profile_dump
+
+         3027112 function calls in 3640.898 seconds
+
+   Ordered by: cumulative time
+   List reduced from 347 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1   23.242   23.242 3640.898 3640.898 strain_mosa.py:28(main)
+        1   61.167   61.167 3587.040 3587.040 scan.py:116(theta_phi_chi)
+    18491   57.029    0.003 3525.743    0.191 crystal.py:502(diffract)
+    18491    0.456    0.000 1498.054    0.081 resolution.py:508(__call__)
+    18491  583.915    0.032 1497.576    0.081 distribution.py:346(__call__)
+    18491  688.081    0.037  913.661    0.049 distribution.py:383(_log_mult_gauss_pdf)
+    18492    0.345    0.000  656.060    0.035 beam.py:106(__call__)
+    18492  409.058    0.022  655.715    0.035 distribution.py:125(__call__)
+    18491  594.942    0.032  597.400    0.032 crystal.py:88(_get_x_lab_flat)
+    18491    1.548    0.000  486.189    0.026 detector.py:173(readout)
+    18495    0.440    0.000  398.917    0.022 detector.py:228(render)
+    18495    0.148    0.000  398.214    0.022 projector.py:47(__call__)
+    18495    0.402    0.000  398.038    0.022 projector.py:162(_project)
+    18495    0.536    0.000  394.381    0.021 creators.py:417(create_sino3d_gpu)
+    37014  279.393    0.008  279.393    0.008 data3d.py:31(create)
+
+
+Done with zi=0,  in:  3641.19 s
+Volume shape :  (265, 265, 27)
+Max count in scan is :  63801
+Min count in scan is :  86
+Number of saturated pixels :  0
+Fraction of saturated pixels :  0.0
+Mon Dec 30 06:54:27 2024    tmp_profile_dump
+
+         3027112 function calls in 3883.616 seconds
+
+   Ordered by: cumulative time
+   List reduced from 347 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1   19.945   19.945 3883.616 3883.616 strain_mosa.py:28(main)
+        1   61.305   61.305 3838.850 3838.850 scan.py:116(theta_phi_chi)
+    18491   55.901    0.003 3777.425    0.204 crystal.py:502(diffract)
+    18491    0.413    0.000 1493.038    0.081 resolution.py:508(__call__)
+    18491  573.233    0.031 1492.603    0.081 distribution.py:346(__call__)
+    18491  691.322    0.037  919.370    0.050 distribution.py:383(_log_mult_gauss_pdf)
+    18491    1.497    0.000  764.457    0.041 detector.py:173(readout)
+    18495    0.408    0.000  677.335    0.037 detector.py:228(render)
+    18495    0.152    0.000  676.667    0.037 projector.py:47(__call__)
+    18495    0.401    0.000  676.487    0.037 projector.py:162(_project)
+    18495    0.540    0.000  672.722    0.036 creators.py:417(create_sino3d_gpu)
+    18492    0.379    0.000  642.986    0.035 beam.py:106(__call__)
+    18492  402.428    0.022  642.608    0.035 distribution.py:125(__call__)
+    18491  587.664    0.032  590.130    0.032 crystal.py:88(_get_x_lab_flat)
+    18507  391.179    0.021  391.179    0.021 algorithm.py:38(run)
+
+
+Done with zi=1,  in:  3884.04 s
+Total time for reflection 4 is: 11147.320891812007 s
+(xrd) naxhe@CME-EX-NAXHE1:~/workspace/darkmod/tests/end_to_end/defrec$ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import cProfile
+import os
+import pstats
+import time
+
+import darling
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.spatial.transform import Rotation
+
+from darkmod import laue, reconstruct, scan
+from darkmod.beam import GaussianLineBeam, HeavysideBeam
+from darkmod.crl import CompundRefractiveLens
+from darkmod.crystal import Crystal
+from darkmod.deformation import straight_edge_dislocation
+from darkmod.detector import Detector
+from darkmod.resolution import PentaGauss
+from darkmod.utils import crop
+
+plt.style.use("dark_background")
+fontsize = 16  # General font size for all text
+ticksize = 16  # tick size
+plt.rcParams["font.size"] = fontsize
+plt.rcParams["xtick.labelsize"] = ticksize
+plt.rcParams["ytick.labelsize"] = ticksize
+
+
+def main(
+    savedir,
+    reflection,
+    ntheta,
+    nphi,
+    nchi,
+    zi,
+    spatial_artefact,
+    plot,
+    factor,
+    exposure,
+    dynamic_range,
+    psf_width,
+    noise,
+):
+    number_of_lenses = 69
+    lens_space = 1600  # microns
+    lens_radius = 50  # microns
+    magnification = 15.1
+
+    energy = 19.1  # keV
+    lambda_0 = laue.keV_to_angstrom(energy)
+
+    Z = 4  # atomic number, berillium
+    rho = 1.845  # density, berillium, g/cm^3
+    A = 9.0121831  # atomic mass number, berillium, g/mol
+    delta = laue.refractive_decrement(Z, rho, A, energy)
+
+    crl = CompundRefractiveLens(
+        number_of_lenses, lens_space, lens_radius, delta, magnification
+    )
+
+    # Instantiate a cubic AL crystal (space group 225)
+    unit_cell = [4.0493, 4.0493, 4.0493, 90.0, 90.0, 90.0]
+
+    orientation = Rotation.random().as_matrix()
+    crystal = Crystal(unit_cell, orientation)
+
+    # remount the crystal to align Q with z-axis
+    symmetry_axis = np.array([0, 0, 1])
+    crystal.align(symmetry_axis, axis=np.array([0, 0, 1]))
+    crystal.align(
+        np.array([0, 1, 0]), axis=np.array([0, 1, 0]), transformation_hkl=symmetry_axis
+    )
+    crystal.align(
+        np.array([1, 0, 0]), axis=np.array([1, 0, 0]), transformation_hkl=symmetry_axis
+    )
+    crystal.remount()  # this updates U and zeros the goniometer.
+
+    # Find the reflection with goniometer motors.
+    # theta, eta = crystal.bring_to_bragg(hkl, energy)
+
+    # TODO add some funcitonaliyt to the crystal to figure this
+    # out automagically
+
+    #
+    # Reflection set of rank : 3
+    # condition number       : 3.0
+    # Diffracting at eta     : 20.2326
+    # Symmetry axis          :  0, 0, 1
+    #                 h	  k	  l	omega_1	omega_2	eta_1	eta_2	theta	2 theta
+    # reflection 40	-1.0	-1.0	3.0	28.00	285.14	20.23	-20.23	15.42	30.83
+    # reflection 45	1.0	-1.0	3.0	298.00	195.14	20.23	-20.23	15.42	30.83
+    # reflection 46	-1.0	1.0	3.0	118.00	15.14	20.23	-20.23	15.42	30.83
+    # reflection 49	1.0	1.0	3.0	105.14	208.00	-20.23	20.23	15.42	30.83
+    #
+
+    # NOTE: The hkl we are probing is NOT alignd with sample-z at this point.
+    # this makes thinking about the projection of rotation gradients a bit harder.
+
+    if reflection == 1:  # Reflection #1
+        hkl = np.array([-1, -1, 3])
+        crystal.goniometer.omega = np.radians(6.431585)
+        thmax = 0.75
+        phimax = 0.35
+        chimax = 2.3
+    elif reflection == 2:  # Reflection #2
+        hkl = np.array([-1.0, 1.0, 3.0])
+        crystal.goniometer.omega = np.radians(96.431585)
+        thmax = 0.7
+        phimax = 2.3
+        chimax = 0.65
+    elif reflection == 3:  # Reflection #3
+        hkl = np.array([1.0, 1.0, 3.0])
+        crystal.goniometer.omega = np.radians(186.431585)
+        thmax = 0.75
+        phimax = 0.35
+        chimax = 2.3
+    elif reflection == 4:
+        hkl = np.array([1.0, -1.0, 3.0])
+        crystal.goniometer.omega = np.radians(276.431585)
+        thmax = 0.7
+        phimax = 2.3
+        chimax = 0.35
+
+    eta = np.radians(20.232593)
+    theta = np.radians(15.416837)
+    # Bring the CRL to diffracted beam.
+    crl.goto(theta, eta)
+
+    # Discretize the crystal
+    _adder = int(factor % 2 == 0)
+    xg = np.linspace(-5, 5, 33 * factor + _adder)  # microns
+    yg = np.linspace(-5, 5, 33 * factor + _adder)  # microns
+    zg = np.linspace(-5, 5, 33 * factor + _adder)  # microns
+
+    if 1:
+        beam = GaussianLineBeam(z_std=0.1, energy=energy)  # 100 nm = 0.1 microns
+    else:
+        beam = HeavysideBeam(y_width=1e8, z_width=zg[1] - zg[0], energy=energy)
+
+    max_ang = 3.0 * 1e-3
+    dh = np.sqrt(xg[0] ** 2 + yg[0] ** 2) * np.tan(max_ang)  # microns
+
+    pad = 3.5 * beam.z_std + dh
+    zi_max = 2
+    zi_min = -2
+    maxz = pad + (zg[1] - zg[0]) * zi_max
+    minz = -pad + (zg[1] - zg[0]) * zi_min
+
+    a = np.argmin(np.abs(zg - minz))
+    b = np.argmin(np.abs(zg - maxz)) + 2
+
+    if zg[a] > minz:
+        a -= 1
+    if zg[b] < maxz:
+        b += 1
+    if np.median(zg[a:b]) > 0:
+        a -= 1
+    if np.median(zg[a:b]) < 0:
+        b += 1
+    zg = zg[a:b]
+
+    assert np.median(zg) == 0
+    assert zg[0] <= minz
+    assert zg[-1] >= maxz
+
+    # apply the motor translation in z
+    # translates one voxel width in z
+    # positivie zi moves the crystal
+    # upwards in the lab frame
+
+    crystal.goniometer.translation = np.array([0, 0, (zg[1] - zg[0]) * zi])
+
+    X, Y, Z = np.meshgrid(xg, yg, zg, indexing="ij")
+
+    # print("zg ", zg)
+    # print("voxelsize ", (xg[1] - xg[0]))
+    # print("beam.z_std ", beam.z_std)
+    # print("X.shape ", X.shape)
+    # print("X.size ", X.size)
+
+    defgrad = straight_edge_dislocation((X, Y, Z), x0=[[0, 0, 0]], U=crystal.U)
+
+    if ntheta == 1:
+        theta_values = np.array([0.0])
+    else:
+        theta_values = np.linspace(-np.abs(thmax), thmax, ntheta) * 1e-3
+    phi_values = np.linspace(-np.abs(phimax), phimax, nphi) * 1e-3
+    chi_values = np.linspace(-np.abs(chimax), chimax, nchi) * 1e-3
+
+    for angarr in (theta_values, phi_values, chi_values):
+        assert np.abs(np.median(angarr)) < 1e-8, angarr
+
+    crystal.discretize(X, Y, Z, defgrad)
+
+    # crystal.write("/home/naxhe/tmp/straight_edge_dislocation")
+    # raise
+
+    Q_lab = crystal.goniometer.R @ crystal.UB_0 @ hkl
+    d_0 = (2 * np.pi) / np.linalg.norm(Q_lab)
+
+    # Beam divergence params
+    desired_FWHM_N = 0.027 * 1e-3
+
+    # Beam wavelength params
+    sigma_e = (6 * 1e-5) / (2 * np.sqrt(2 * np.log(2)))
+    epsilon = np.random.normal(0, sigma_e, size=(20000,))
+    random_energy = energy + epsilon * energy
+    sigma_lambda = laue.keV_to_angstrom(random_energy).std()
+    mu_lambda = lambda_0
+
+    FWHM_CRL_vertical = 0.556 * 1e-3
+    FWHM_CRL_horizontal = FWHM_CRL_vertical
+
+    # angular_tilt = 0.73 * 1e-3  # perhaps this is what happened in Poulsen 2017?
+    # the idea is that a slight horizontal titlt of the CRL will cause the
+    # NA in the horixontal plane to decrease which would explain the rolling curves
+    # discrepancies.
+    # dh = (crl.length * np.sin(angular_tilt)) * 1e-6
+    # FWHM_CRL_horizontal = FWHM_CRL_vertical - 2 * dh
+
+    # # TODO: truncation wont help
+    resolution_function = PentaGauss(
+        crl.optical_axis,
+        1e-9 / (2 * np.sqrt(2 * np.log(2))),
+        # desired_FWHM_N / (2 * np.sqrt(2 * np.log(2))),
+        desired_FWHM_N / (2 * np.sqrt(2 * np.log(2))),
+        FWHM_CRL_horizontal / (2 * np.sqrt(2 * np.log(2))),
+        FWHM_CRL_vertical / (2 * np.sqrt(2 * np.log(2))),
+        mu_lambda,
+        sigma_lambda,
+    )
+    resolution_function.compile()
+
+    # Detector size
+    det_row_count = 272
+    det_col_count = 272
+    pixel_size = 0.75
+
+    detector = Detector.orthogonal_mount(
+        crl,
+        pixel_size,
+        det_row_count,
+        det_col_count,
+        super_sampling=1,
+        exposure=exposure,
+        dynamic_range=dynamic_range,
+        psf_width=psf_width,
+        noise=noise,
+    )
+
+    # beam = HeavysideBeam(y_width=1e8, z_width = zg[1] - zg[0], energy=energy)
+
+    if len(theta_values) == 1:
+        dth = 0
+    else:
+        dth = theta_values[1] - theta_values[0]
+    dphi = phi_values[1] - phi_values[0]
+    dchi = chi_values[1] - chi_values[0]
+
+    # print("pixel_size", pixel_size)
+    # print(
+    # "Number of scan points is: ",
+    # (len(theta_values) * len(phi_values) * len(chi_values)),
+    # )
+    # print("theta resolution is: ", dth * 1e3, "mrad")
+    # print("phi resolution is: ", dphi * 1e3, "mrad")
+    # print("chi resolution is: ", dchi * 1e3, "mrad")
+
+    strain_mosa = scan.theta_phi_chi(
+        hkl,
+        theta_values,
+        phi_values,
+        chi_values,
+        crystal,
+        crl,
+        detector,
+        beam,
+        resolution_function,
+        spatial_artefact,
+    )
+
+    # plt.style.use("dark_background")
+    # fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+    # im = ax.imshow(strain_mosa[..., 1, 1, 1], cmap="plasma")
+    # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    # plt.tight_layout()
+    # plt.show()
+
+    print("Volume shape : ", X.shape)
+    print("Max count in scan is : ", np.max(strain_mosa))
+    print("Min count in scan is : ", np.min(strain_mosa))
+    print("Number of saturated pixels : ", np.sum(strain_mosa == dynamic_range))
+    print(
+        "Fraction of saturated pixels : ",
+        np.sum(strain_mosa == dynamic_range) / strain_mosa.size,
+    )
+
+    # raise ValueError("STOP HERE")
+    # # TODO: lets investigate the aliasing artefacts.
+
+    # print("Subtracting background...")
+    saturated_pixels_mask = strain_mosa == 64000
+    background = np.median(strain_mosa[:, 0:5, :, :]).astype(np.uint16)
+    # print("background", background)
+    strain_mosa.clip(background, out=strain_mosa)
+    strain_mosa -= background
+    strain_mosa[saturated_pixels_mask] = 64000
+
+    mask = np.sum(strain_mosa, axis=(-1, -2, -3))
+    # fig, ax = plt.subplots(1, 1, figsize=(7,7))
+    # im = ax.imshow(mask)
+    # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    # plt.tight_layout()
+
+    mask = mask > np.max(mask) * 0.05
+
+    mu, cov = darling.properties.moments(
+        strain_mosa, coordinates=(theta_values, phi_values, chi_values)
+    )
+
+    # We expect to be able to approximate the mean Q vector along the ray paths.
+
+    def get_beam_density(beam, crystal):
+        # NOTE: this is not correct, the translation must be applied
+        x_lab = crystal.goniometer.R @ crystal._x
+        x_lab += crystal.goniometer.translation[:, np.newaxis]
+        sample_beam_density = beam(x_lab).reshape(crystal._grid_scalar_shape)
+        return sample_beam_density
+
+    def render_beam_density(sample_beam_density):
+        w = detector.render(
+            sample_beam_density,
+            crystal.voxel_size,
+            crl.optical_axis,
+            crl.magnification,
+            crystal.goniometer.R,
+            crystal.goniometer.translation,
+        )
+        return w
+
+    def expected_Q(crystal, beam, detector):
+        Q_sample_vol = crystal.get_Q_sample(hkl)
+        sample_beam_density = get_beam_density(beam, crystal)
+        Qlw = Q_sample_vol * sample_beam_density[..., np.newaxis]
+        Q_true = np.zeros((mu.shape[0], mu.shape[1], 3))
+        for i in range(3):
+            Q_true[:, :, i] = detector.render(
+                Qlw[:, :, :, i],
+                crystal.voxel_size,
+                crl.optical_axis,
+                crl.magnification,
+                crystal.goniometer.R,
+                crystal.goniometer.translation,
+            )
+        w = render_beam_density(sample_beam_density)
+        Q_true = np.divide(
+            Q_true,
+            w[:, :, np.newaxis],
+            out=np.full_like(Q_true, np.nan),
+            where=w[:, :, np.newaxis] != 0,
+        )
+        return Q_true
+
+    Q_true = expected_Q(crystal, beam, detector)
+
+    # sample space recon
+    Q_rec = reconstruct.diffraction_vectors(
+        mu,
+        crystal,
+        lambda_0,
+        crl,
+    )
+
+    d_field_rec = (2 * np.pi) / np.linalg.norm(Q_rec, axis=-1)
+    d_field_true = (2 * np.pi) / np.linalg.norm(Q_true, axis=-1)
+    hkl_strain_rec = (d_field_rec - d_0) / d_0
+    hkl_strain_true = (d_field_true - d_0) / d_0
+
+    bp_Q_sample_3D_true = np.zeros((*X.shape, 3))
+    for i in range(3):
+        bp_Q_sample_3D_true[..., i] = detector.backpropagate(
+            Q_true[..., i],
+            X.shape,
+            crystal.voxel_size,
+            crl.optical_axis,
+            crl.magnification,
+            crystal.goniometer.R,
+            crystal.goniometer.translation,
+        )
+
+    bp_Q_sample_3D_rec = np.zeros((*X.shape, 3))
+    for i in range(3):
+        bp_Q_sample_3D_rec[..., i] = detector.backpropagate(
+            Q_rec[..., i],
+            X.shape,
+            crystal.voxel_size,
+            crl.optical_axis,
+            crl.magnification,
+            crystal.goniometer.R,
+            crystal.goniometer.translation,
+        )
+
+    if savedir is not None:
+        if zi < 0:
+            ss = "_zi_m" + str(np.abs(zi))
+        else:
+            ss = "_zi_" + str(zi)
+        fname = "reflection_" + str(reflection) + ss
+
+        strain_mosa_sparse = strain_mosa.flatten()
+        sparsity_mask = strain_mosa_sparse > 0
+        strain_mosa_sparse = strain_mosa_sparse[sparsity_mask]
+        sparse_indices = np.where(sparsity_mask)[0].astype(np.uint64)
+
+        np.savez(
+            os.path.join(savedir, fname),
+            Q_rec=Q_rec,
+            Q_true=Q_true,
+            strain_mosa_sparse=strain_mosa_sparse,
+            strain_mosa_shape=strain_mosa.shape,
+            sparse_indices=sparse_indices,
+            hkl=hkl,
+            U_0=crystal.U,
+            B_0=crystal.B,
+            eta_0=crl.eta,
+            theta_0=crl.theta,
+            mu_0=crystal.goniometer.mu,
+            omega_0=crystal.goniometer.omega,
+            phi_0=crystal.goniometer.phi,
+            chi_0=crystal.goniometer.chi,
+            delta_theta=theta_values,
+            phi=phi_values,
+            chi=chi_values,
+            X=X,
+            Y=Y,
+            Z=Z,
+            defgrad=defgrad,
+            Q_sample_3D_true=crystal.get_Q_sample(hkl),
+            optical_axis=crl.optical_axis,
+            magnification=crl.magnification,
+            detector_corners=detector.detector_corners,
+            det_col_count=detector.det_col_count,
+            det_row_count=detector.det_row_count,
+            pixel_size=detector.pixel_size,
+            voxel_size=crystal.voxel_size,
+            bp_Q_sample_3D_true=bp_Q_sample_3D_true,
+            bp_Q_sample_3D_rec=bp_Q_sample_3D_rec,
+            translation=crystal.goniometer.translation,
+            zi=zi,
+            intensity_mask=mask,
+            exposure=exposure,
+            dynamic_range=dynamic_range,
+            psf_width=psf_width,
+            noise=noise,
+        )
+
+    if plot:
+        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+        im = ax.imshow(mask)
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        plt.title("Intensity mask")
+        plt.tight_layout()
+
+        plt.style.use("dark_background")
+        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+        title_str = (
+            "Strain-Mosa detector image "
+            + "aquired at \n $\\theta$="
+            + str(theta_values[strain_mosa.shape[2] // 2] * 1e3)
+            + " mrad, "
+            + "$\phi$="
+            + str(phi_values[strain_mosa.shape[3] // 2] * 1e3)
+            + " mrad, "
+            + "$\chi$="
+            + str(chi_values[strain_mosa.shape[4] // 2] * 1e3)
+            + " mrad"
+        )
+        ax.set_title(title_str)
+        im = ax.imshow(
+            strain_mosa[
+                :,
+                :,
+                strain_mosa.shape[2] // 2,
+                strain_mosa.shape[3] // 2,
+                strain_mosa.shape[4] // 2,
+            ],
+            cmap="plasma",
+        )
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+
+        fig, ax = plt.subplots(1, 3, figsize=(16, 6), sharex=True, sharey=True)
+        _mu = crop(mu, mask)
+        for i in range(3):
+            # im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet")
+
+            if i == 0:
+                im = ax[i].imshow(
+                    _mu[:, :, i] * 1e3, cmap="jet", vmin=-0.006, vmax=0.006
+                )
+            if i == 1:
+                im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.22, vmax=0.22)
+            if i == 2:
+                im = ax[i].imshow(_mu[:, :, i] * 1e3, cmap="jet", vmin=-0.22, vmax=0.22)
+
+            cbar = fig.colorbar(im, ax=ax[i], fraction=0.046 / 2.0, pad=0.04)
+            ax[i].set_title(
+                r"Mean " + [r"$\Delta \theta$", r"$\phi$", r"$\chi$"][i] + " [mrad]"
+            )
+            ax[i].set_xlabel("y [pixels]")
+            if i == 0:
+                ax[i].set_ylabel("z [pixels]")
+            ax[i].tick_params(axis="both", which="major", labelsize=16)
+            cbar.ax.tick_params(labelsize=16)
+        plt.tight_layout()
+
+        fig, ax = plt.subplots(2, 3, figsize=(16, 12), sharex=True, sharey=True)
+        fig.suptitle(
+            r"True and reconstructed Q vectors (in lab)",
+        )
+        for j in range(2):
+            Qs = [Q_true, Q_rec]
+            _Q = Qs[j]
+            _Q[np.abs(_Q) < 1e-12] = 0
+            title = [r"True ", r"Estimated "][j]
+            for i in range(3):
+                vmin = np.nanmin(crop(Qs[1][:, :, i], mask))
+                vmax = np.nanmax(crop(Qs[1][:, :, i], mask))
+                im = ax[j, i].imshow(crop(_Q[:, :, i], mask), vmin=vmin, vmax=vmax)
+                cbar = fig.colorbar(im, ax=ax[j, i], fraction=0.046 / 2.0, pad=0.04)
+                ax[j, i].set_title(
+                    title + [r"$Q_x$", r"$Q_y$", r"$Q_z$"][i],
+                )
+                if j == 1:
+                    ax[j, i].set_xlabel("y [pixels]")
+                if i == 0:
+                    ax[j, i].set_ylabel("z [pixels]")
+                ax[j, i].tick_params(axis="both", which="major", labelsize=16)
+                cbar.ax.tick_params(labelsize=16)
+        plt.tight_layout()
+
+        fig, ax = plt.subplots(1, 2, figsize=(14, 7), sharex=True, sharey=True)
+        fig.suptitle(
+            r"True and reconstructed strain in hkl direction: ($d_0$ - d) / $d_0$ )",
+        )
+        strains = [hkl_strain_true, hkl_strain_rec]
+        cmaps = ["RdBu_r", "RdBu_r"]
+        titles = ["True", "Recon"]
+        for i in range(2):
+            im = ax[i].imshow(
+                crop(strains[i], mask), cmap=cmaps[i], vmin=-3 * 1e-5, vmax=3 * 1e-5
+            )
+            fig.colorbar(im, ax=ax[i], fraction=0.046 / 2.0, pad=0.04)
+            ax[i].set_title(titles[i])
+        ax[0].set_xlabel("y [pixels]")
+        ax[1].set_xlabel("y [pixels]")
+        ax[0].set_ylabel("z [pixels]")
+        plt.tight_layout()
+
+        phi_mesh, chi_mesh = np.meshgrid(phi_values, chi_values, indexing="ij")
+        support = np.sum(strain_mosa, axis=(0, 1))[len(theta_values) // 2, :, :]
+        fig1, ax1 = plt.subplots(1, 1, figsize=(10, 8))
+        ax1.set_title("$\phi$-$\chi$  Log-Sparsity Scan Pattern")
+        im = ax1.pcolormesh(
+            chi_mesh * 1e3,
+            phi_mesh * 1e3,
+            np.log(support.clip(1)),
+            cmap="plasma",
+            edgecolors="black",
+        )
+        ax1.set_xlabel("$\chi$ [mrad]")
+        ax1.set_ylabel("$\phi$ [mrad]")
+        fig1.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+
+        theta_mesh, chi_mesh = np.meshgrid(theta_values, chi_values, indexing="ij")
+        support = np.sum(strain_mosa, axis=(0, 1))[:, len(phi_values) // 2, :]
+        fig1, ax1 = plt.subplots(1, 1, figsize=(10, 8))
+        ax1.set_title("$\\theta$-$\chi$ Log-Sparsity Scan Pattern")
+        im = ax1.pcolormesh(
+            chi_mesh * 1e3,
+            theta_mesh * 1e3,
+            np.log(support.clip(1)),
+            cmap="plasma",
+            edgecolors="black",
+        )
+        ax1.set_xlabel("$\chi$ [mrad]")
+        ax1.set_ylabel("$\\theta$ [mrad]")
+        fig1.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+
+        theta_mesh, phi_mesh = np.meshgrid(theta_values, phi_values, indexing="ij")
+        support = np.sum(strain_mosa, axis=(0, 1))[:, :, len(chi_values) // 2]
+        fig1, ax1 = plt.subplots(1, 1, figsize=(10, 8))
+        ax1.set_title("$\\theta$-$\chi$ Log-Sparsity Scan Pattern")
+        im = ax1.pcolormesh(
+            theta_mesh * 1e3,
+            phi_mesh * 1e3,
+            np.log(support.clip(1)),
+            cmap="plasma",
+            edgecolors="black",
+        )
+        ax1.set_xlabel("$\\theta$ [mrad]")
+        ax1.set_ylabel("$\phi$ [mrad]")
+        fig1.colorbar(im, ax=ax1, fraction=0.046, pad=0.04)
+        plt.tight_layout()
+
+        plt.show()
+
+
+if __name__ == "__main__":
+    ntheta = 11
+    nphi = 41
+    nchi = 41
+    factor = 8
+
+    # 5.83 : 9
+    # 9.474 : 11
+    # 18.917 : 17
+    # 37.82 : 27
+
+    if factor == 1:
+        maxval = 8.459398
+    elif factor == 2:
+        maxval = 13.730573
+    elif factor == 4:
+        maxval = 27.416029
+    elif factor == 8:
+        maxval = 54.82392
+
+    # 1 : 0.69 * _c
+    # 2 : 0.96 * _c
+    # 3 : 0.69 * _c
+    # 4 : 0.96 * _c
+
+    exposure = 0.98 * 64000 / maxval
+    dynamic_range = 64000
+    psf_width = 1
+    noise = True
+    plot = False
+
+    base = "/home/naxhe/workspace/darkmod/tests/end_to_end/defrec/saves/"
+    save_dir = base + "paper_1_run_3"
+    # save_dir = None
+
+    profile = True
+    z_steps = [-1, 0, 1]
+    # z_steps = [0]
+
+    # z_steps = [0]
+    # reflections = [2]
+
+    reflections = [1, 2]
+    #reflections = [3, 4]
+
+    # pr = cProfile.Profile()
+    # pr.enable()
+
+    for ri, reflection in enumerate(reflections):
+        print("\n\n######## REFLECTION " + str(reflection) + " ##########")
+        tc = 0
+        for zi in z_steps:
+            t1 = time.perf_counter()
+
+            if profile:
+                pr = cProfile.Profile()
+                pr.enable()
+
+            main(
+                savedir=save_dir,
+                reflection=reflection,
+                ntheta=ntheta,
+                nphi=nphi,
+                nchi=nchi,
+                zi=zi,
+                spatial_artefact=False,
+                plot=plot,
+                factor=factor,
+                exposure=exposure,
+                dynamic_range=dynamic_range,
+                psf_width=psf_width,
+                noise=noise,
+            )
+
+            if profile:
+                pr.disable()
+                pr.dump_stats("tmp_profile_dump")
+                ps = pstats.Stats("tmp_profile_dump").strip_dirs().sort_stats("cumtime")
+                ps.print_stats(15)
+
+            t2 = time.perf_counter()
+            print(
+                "Done with zi="
+                + str(zi)
+                + ",  in:  "
+                + str(np.round(t2 - t1, 2))
+                + " s"
+            )
+            tc += t2 - t1
+        print("Total time for reflection " + str(reflection) + " is: " + str(tc) + " s")
+
+    # pr.disable()
+    # pr.dump_stats("tmp_profile_dump")
+    # ps = pstats.Stats("tmp_profile_dump").strip_dirs().sort_stats("cumtime")
+    # ps.print_stats(15)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
