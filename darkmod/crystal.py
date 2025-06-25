@@ -584,6 +584,8 @@ if __name__ == "__main__":
     from darkmod.detector import Detector
     from darkmod.resolution import PentaGauss
 
+    
+
     number_of_lenses = 50
     lens_space = 2000  # microns
     lens_radius = 50  # microns
