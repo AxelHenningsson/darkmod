@@ -353,9 +353,9 @@ class Crystal(object):
                 primary_rotation_vector = self.goniometer.R @ (
                     self.U @ self.B @ transformation_hkl
                 )
-                assert np.allclose(
-                    np.dot(primary_rotation_vector, nhat), 0
-                ), "Transformation hkl need to be orthogonal to hkl"
+                assert np.allclose(np.dot(primary_rotation_vector, nhat), 0), (
+                    "Transformation hkl need to be orthogonal to hkl"
+                )
                 primary_rotation_vector *= np.sign(
                     np.dot(primary_rotation_vector, np.cross(nhat, axis))
                 )
@@ -583,8 +583,6 @@ if __name__ == "__main__":
     from darkmod.deformation import linear_gradient
     from darkmod.detector import Detector
     from darkmod.resolution import PentaGauss
-
-    
 
     number_of_lenses = 50
     lens_space = 2000  # microns
