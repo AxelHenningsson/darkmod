@@ -1,3 +1,5 @@
+import warnings
+
 import matplotlib.pyplot as plt
 import meshio
 import numpy as np
@@ -5,6 +7,7 @@ import pandas as pd
 from scipy.spatial.transform import Rotation
 
 from darkmod import laue
+from darkmod.beam import GaussianLineBeam
 from darkmod.goniometer import Goniometer
 
 # TODO: implement non-zero eta diffraction alignments.
@@ -536,11 +539,44 @@ class Crystal(object):
             Q_lab_flat, angular_crl_shifts=angular_crl_shifts
         )  # 40 %
 
-        w = beam(x_lab)  # 20 %
+        # if isinstance(beam, GaussianLineBeam):
+        #     # when the beam is degenerate in z this approximation is
+        #     # much better than the naive centroid sampling, especially
+        #     # for small beams and large voxels which otherwise cause
+        #     # aliasing in the w field and thus also in the image.
+
+        #     if beam.z_std < self.voxel_size / 6.0:
+        #         raise Warning(
+        #             "Beam width is smaller than voxel size, this will cause aliasing."
+        #         )
+
+        #     voxel_integrator = DegenerateVoxelIntegrator(self.voxel_size)
+        #     coord1D = np.linspace(-beam.z_std * 6, beam.z_std * 6, 255)
+        #     ds = coord1D[1] - coord1D[0]
+        #     nsteps = int(np.sqrt(3) / ds) * 2 - 1
+        #     print(f"nsteps: {nsteps}")
+        #     func1d = beam(coord1D)
+        #     w = voxel_integrator(
+        #         func1d,
+        #         coord1D,
+        #         x_lab[2],
+        #         self.goniometer.R,
+        #         nsteps=nsteps,
+        #     )
+        # else:
+        #     w = beam(x_lab[2]) * (self.voxel_size**3)
+
+        if isinstance(beam, GaussianLineBeam) and beam.z_std < self.voxel_size:
+            warnings.warn(
+                "The beam z-extent is practically confined to a single voxel, this will cause severe aliasing.",
+                UserWarning,
+            )
+
+        w = beam(x_lab) * (self.voxel_size**3)
+
         voxel_volume = (p_Q * w).reshape(self._grid_scalar_shape)
 
         image = detector.readout(
-            # self._prune_volume(voxel_volume),
             voxel_volume,
             self.voxel_size,
             crl.optical_axis,
@@ -728,4 +764,5 @@ if __name__ == "__main__":
     im = ax.imshow(image, cmap="gray", vmin=0, vmax=1)
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     plt.tight_layout()
+    plt.show()
     plt.show()
