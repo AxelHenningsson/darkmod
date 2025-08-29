@@ -100,8 +100,16 @@ class GaussianLineBeam(object):
             energy (:obj:`float`): Energy of the beam.
         """
         self.z_std = z_std
-        self._intensity_z = Normal(0, z_std)
         self.energy = energy
+
+    @property
+    def z_std(self):
+        return self._z_std
+
+    @z_std.setter
+    def z_std(self, value):
+        self._z_std = value
+        self._intensity_z = Normal(0, value)
 
     def __call__(self, x):
         """Calculate beam intensity weights based on the input positions.
@@ -112,7 +120,10 @@ class GaussianLineBeam(object):
         Returns:
             :obj:`numpy.ndarray`: Intensity weight for the given positions.
         """
-        return self._intensity_z(x[2])
+        if x.ndim == 1:
+            return self._intensity_z(x)
+        else:
+            return self._intensity_z(x[2])
 
 
 if __name__ == "__main__":
