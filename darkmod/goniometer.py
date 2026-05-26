@@ -10,21 +10,32 @@ class Goniometer:
 
     Attributes:
         phi, chi, mu, omega (:obj:`float`): Goniometer motor settings in radians. Starts at zero.
-        translation (:obj:`numpy.ndarray`): Goniometer translation in lab coordinates. Starts at zero.
-            the translation is in units of microns.
+        ux, uy, uz (:obj:`float`): The translation in units of microns. These sit at the top of the
+        goniometer motor stack!
     """
 
     def __init__(self):
         """
         Initialize DFXM goniometer.
         """
-        self.phi = self.chi = self.mu = self.omega = 0
-
-        self.translation = np.zeros((3,))
-
+        self.phi = self.chi = self.mu = self.omega = self.ux = self.uy = self.uz = 0
         self._xhat_lab = np.array([1.0, 0.0, 0.0])
         self._yhat_lab = np.array([0.0, 1.0, 0.0])
         self._zhat_lab = np.array([0.0, 0.0, 1.0])
+
+    @property
+    def u(self):
+        return np.array([self.ux, self.uy, self.uz])
+
+    @u.setter
+    def u(self, value):
+        self.ux, self.uy, self.uz = value
+
+    def get_lab_translation(self):
+        return self.R @ self.u
+
+    def goto_lab_translation(self, tx, ty, tz):
+        self.u = self.R.inv() @ np.array([tx, ty, tz])
 
     def relative_move(self, dphi=None, dchi=None, domega=None, dmu=None):
         if dphi is not None:
@@ -78,7 +89,7 @@ class Goniometer:
         if isinstance(rotation, np.ndarray):
             rotation = Rotation.from_matrix(rotation)
         axes = np.array(
-            [self._xhat_lab, self._zhat_lab, self._yhat_lab]
+            [self._xhat_lab, self._zhat_lab, -self._yhat_lab]
         )  # Phi then Chi then Mu
         chi, omega, mu = Rotation.as_davenport(rotation, axes, order="extrinsic")
         return 0, chi, omega, mu
@@ -101,7 +112,7 @@ class Goniometer:
         """Construct a rotation object for an input phi.
 
         Args:
-            phi (:obj:`float`): Phi angle in radians (top rock - y rotation).
+            phi (:obj:`float`): Phi angle in radians (rotation around positive y-axis).
 
         Returns:
             (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer phi rotation object.
@@ -113,7 +124,7 @@ class Goniometer:
         """Construct a rotation object for an input chi.
 
         Args:
-            chi (:obj:`float`): Chi angle in radians (top roll - x rotation).
+            chi (:obj:`float`): Chi angle in radians (rotation around positive x-axis).
 
         Returns:
             (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer chi rotation object.
@@ -125,7 +136,7 @@ class Goniometer:
         """Construct a rotation object for an input omega.
 
         Args:
-            omega (:obj:`float`): Omega angle in radians (around Q-vector - z rotation).
+            omega (:obj:`float`): Omega angle in radians (rotation around positive z-axis).
 
         Returns:
             (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer omega rotation object.
@@ -137,12 +148,12 @@ class Goniometer:
         """Construct a rotation object for an input mu.
 
         Args:
-            mu (:obj:`float`): Mu angle in radians (bottom roll - x rotation).
+            mu (:obj:`float`): Mu angle in radians (bottom roll rotation around negative y).
 
         Returns:
             (:obj:`darkmod.goniometer.HighPrecisionRotation`): Goniometer mu rotation object.
         """
-        Ry_mu = Rotation.from_rotvec(self._yhat_lab * mu)
+        Ry_mu = Rotation.from_rotvec(-self._yhat_lab * mu)
         return (Ry_mu).as_matrix()
 
     @property
@@ -160,14 +171,14 @@ class Goniometer:
         Ry_phi = Rotation.from_rotvec(self._yhat_lab * self.phi)
         Rx_chi = Rotation.from_rotvec(self._xhat_lab * self.chi)
         Rz_omega = Rotation.from_rotvec(self._zhat_lab * self.omega)
-        Ry_mu = Rotation.from_rotvec(self._yhat_lab * self.mu)
+        Ry_mu = Rotation.from_rotvec(-self._yhat_lab * self.mu)
         R_goni = (Ry_mu * Rz_omega * Rx_chi * Ry_phi).as_matrix()
         return R_goni
 
     def info(self):
         print("\n")
         print("------------------------------------------------------")
-        print("Goniometer is at angles (degrees) : ")
+        print("Goniometer motors are at (units: degrees & microns) : ")
         print("------------------------------------------------------")
         for key in self.motors:
             print(key.ljust(7), str(np.round(self.motors[key], 6)))
@@ -179,10 +190,14 @@ class Goniometer:
 
         Returns:
             dict: Goniometer angles with keys 'phi', 'chi', 'omega', and 'mu', (units of degrees)
+            as well as the translation in microns with keys 'ux', 'uy', and 'uz'.
         """
         return {
             "phi": np.degrees(self.phi),
             "chi": np.degrees(self.chi),
             "omega": np.degrees(self.omega),
             "mu": np.degrees(self.mu),
+            "ux": self.ux,
+            "uy": self.uy,
+            "uz": self.uz,
         }

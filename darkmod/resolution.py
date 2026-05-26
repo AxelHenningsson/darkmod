@@ -8,7 +8,6 @@ from darkmod.distribution import (
     MultivariateNormal,
     MultivariateTruncatedNormal,
     Normal,
-    TruncatedNormal,
 )
 from darkmod.transforms import Q_to_lab, lab_to_Q
 
@@ -90,7 +89,7 @@ class TruncatedPentaGauss(object):
         ).reshape(5, 1)
 
         self._x = MultivariateTruncatedNormal(
-            np.array([1., 0., 0., 0., 0.]),
+            np.array([1.0, 0.0, 0.0, 0.0, 0.0]),
             self._cov_x,
             self._lower_bound_x,
             self._upper_bound_x,
@@ -244,13 +243,14 @@ class TruncatedPentaGauss(object):
         assert len(Q_vectors.shape) == 2 and Q_vectors.shape[0] == 3
 
         if self._is_compiled:
-
             if angular_crl_shifts is not None:
                 dQ_angular_shift = self._get_Q_shifts(angular_crl_shifts)
             else:
                 dQ_angular_shift = 0
 
-            Q_vectors_q_system = lab_to_Q(Q_vectors + dQ_angular_shift + self.dQ_theta_shift, self.Q)
+            Q_vectors_q_system = lab_to_Q(
+                Q_vectors + dQ_angular_shift + self.dQ_theta_shift, self.Q
+            )
             p_Q = self._p_Q_interp(Q_vectors_q_system.T)
 
             if error_estimate:
@@ -260,11 +260,9 @@ class TruncatedPentaGauss(object):
                 return p_Q
 
         else:
-        
             raise ValueError(
                 "The resolution function requires compiling before any calls can be made to the PDF."
             )
-       
 
     def _get_Q_shifts(self, angular_crl_shifts):
         M = self._get_M()
@@ -288,8 +286,10 @@ class TruncatedPentaGauss(object):
         if self._is_compiled:
             M = self._get_M()
             delta_two_theta = 2 * theta - 2 * self.theta_0
-            self._x.mu[4] = delta_two_theta  # mean in vertical CRL position. TODO: include the eta stuff.
-            self.dQ_theta_shift = (self.Q - M @ self._x.mu).reshape(3,1)
+            self._x.mu[4] = (
+                delta_two_theta  # mean in vertical CRL position. TODO: include the eta stuff.
+            )
+            self.dQ_theta_shift = (self.Q - M @ self._x.mu).reshape(3, 1)
         else:
             raise ValueError(
                 "The resolution function requires compiling before any theta shifts can be introduced."
@@ -826,7 +826,6 @@ class DualKentGauss(object):
         std_p_Q = np.zeros((q_points_lab.shape[1],))
 
         for i, Q_probe in enumerate(q_points_lab.T):
-
             d = dmap[i]
 
             if prior == "CRL":
@@ -934,7 +933,6 @@ class DualKentGauss(object):
 
 
 if __name__ == "__main__":
-
     U = np.eye(3, 3)
     a = b = c = 4.0493
     unit_cell = [a, b, c, 90.0, 90.0, 90.0]
@@ -1030,7 +1028,6 @@ if __name__ == "__main__":
     )
 
     if 1:
-
         plt.style.use("dark_background")
         import cProfile
         import pstats

@@ -33,12 +33,12 @@ class GpuProjector(object):
     ):
         assert super_sampling > 0, "The super sampling must be positive"
         assert isinstance(super_sampling, int), "The super sampling must be integer"
-        assert (
-            det_row_count % super_sampling == 0
-        ), "The super sampling must divise the detector size in an integer number of blocks."
-        assert (
-            det_col_count % super_sampling == 0
-        ), "The super sampling must divise the detector size in an integer number of blocks."
+        assert det_row_count % super_sampling == 0, (
+            "The super sampling must divise the detector size in an integer number of blocks."
+        )
+        assert det_col_count % super_sampling == 0, (
+            "The super sampling must divise the detector size in an integer number of blocks."
+        )
         self.pixel_size = pixel_size
         self.det_row_count = det_row_count
         self.det_col_count = det_col_count
@@ -50,7 +50,7 @@ class GpuProjector(object):
         voxel_size,
         ray_direction,
         detector_corners,
-        translation=np.zeros((3,)),
+        #translation=np.zeros((3,)),
     ):
         """Project the voxel volume along the optical axis.
 
@@ -84,7 +84,7 @@ class GpuProjector(object):
             voxel_size,
             ray_direction,
             detector_corners,
-            translation,
+            #translation,
         )
 
         projection_image = self._bin_projection(projection_image)
@@ -97,7 +97,7 @@ class GpuProjector(object):
         voxel_size,
         ray_direction,
         detector_corners,
-        translation=np.zeros((3,)),
+        #translation=np.zeros((3,)),
     ):
         """Backpropagate the pixel values of a detector image to the sample volume.
 
@@ -124,7 +124,9 @@ class GpuProjector(object):
         n_slices, n_rows, n_cols = o, n, m
         vol_geom = astra.create_vol_geom((n_rows, n_cols, n_slices))
 
-        vol_geom = astra.functions.move_vol_geom(vol_geom, translation)
+        # = astra.functions.move_vol_geom(
+        #    vol_geom, translation / voxel_size
+        #)  # note that this is in units of voxels
 
         proj_geom = self._get_astra_projector(
             voxel_size,
@@ -165,7 +167,7 @@ class GpuProjector(object):
         voxel_size,
         ray_direction,
         detector_corners,
-        translation,
+        #translation,
     ):
         """Project a voxel volume block on gpu."""
         proj_geom = self._get_astra_projector(
@@ -178,7 +180,9 @@ class GpuProjector(object):
         n_slices, n_rows, n_cols = astra_voxel_volume.shape
         vol_geom = astra.create_vol_geom((n_rows, n_cols, n_slices))
 
-        vol_geom = astra.functions.move_vol_geom(vol_geom, translation)
+        #vol_geom = astra.functions.move_vol_geom(
+        #    vol_geom, translation / voxel_size
+        #)  # note that this is in units of voxels
         sino_id, sino = astra.create_sino3d_gpu(astra_voxel_volume, proj_geom, vol_geom)
         astra.data3d.delete(sino_id)
         return sino[:, 0, :]

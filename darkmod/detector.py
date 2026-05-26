@@ -263,12 +263,15 @@ class Detector(object):
         # support rotated volumes. Also, this is faster than rotating all the voxels
         # in the volume, here we require to only rotate the optical axis and the
         # detector corners.
-        detector_corners = sample_rotation.T @ self.detector_corners
+        detector_corners = (
+            sample_rotation.T @ self.detector_corners - sample_translation
+        )
         ray_direction = sample_rotation.T @ optical_axis
 
         # The CRL will magnify the sample voxel_volume. We simulate this by passing
         # a virtual voxel size to the projector, scaled by the crl magnification.
         magnified_voxel_size = voxel_size * magnification
+        # magnified_sample_translation = sample_translation * magnification
 
         # The voxel volume can now be tomographically ray-traced along the
         # diffracted ray_direction resultingin a detector image.
@@ -277,7 +280,7 @@ class Detector(object):
             magnified_voxel_size,
             ray_direction,
             detector_corners,
-            sample_translation,
+            # magnified_sample_translation,
         )
 
         # The resulting image should be inverted due to the CRL lens effect.
@@ -325,9 +328,12 @@ class Detector(object):
             :obj:`np.ndarray`: The voxel volume populated by the backprojected values of detector_image.
         """
 
-        detector_corners = sample_rotation.T @ self.detector_corners
+        detector_corners = (
+            sample_rotation.T @ self.detector_corners - sample_translation
+        )
         ray_direction = sample_rotation.T @ optical_axis
         magnified_voxel_size = voxel_size * magnification
+        # magnified_sample_translation = sample_translation * magnification
 
         projection_image = self._invert(detector_image)
 
@@ -337,7 +343,7 @@ class Detector(object):
             magnified_voxel_size,
             ray_direction,
             detector_corners,
-            sample_translation,
+            # magnified_sample_translation,
         )
 
         # This part is needed due to the fact that the number of detector pixels
@@ -351,7 +357,7 @@ class Detector(object):
             magnified_voxel_size,
             ray_direction,
             detector_corners,
-            sample_translation,
+            # magnified_sample_translation,
         )
 
         backprojection = np.divide(

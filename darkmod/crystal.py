@@ -51,7 +51,7 @@ class Crystal(object):
 
         self._cache = {}
 
-    def discretize(self, X, Y, Z, defgrad):
+    def discretize(self, X, Y, Z, defgrad, density=None):
         """Discretize the crystal over a unifrom grid.
 
         Associates points (x,y,z) in the crystal with deformation gradient tensors (F).
@@ -65,7 +65,9 @@ class Crystal(object):
         Args:
             X, Y, Z (:obj:`numpy array`): Coordinate arrays, these are points in the crystal, shape=(m,n,0).
                 the voxel dimension must be the same in all dimensions.
-            defgrad (:obj:`numpy array`): Per point defomration gradient tensor (F), shape=(m,n,3,3).
+            defgrad (:obj:`numpy array`): Per point defomration gradient tensor (F), shape=(m,n,o,3,3).
+            density (:obj:`numpy array`): Per point density, shape=(m,n,o) as floating point values between
+            0 and 1. Defaults to None, in which case the density is assumed to be uniformly 1.
         """
         self._grid_scalar_shape = X.shape
         self._grid_vector_shape = (*X.shape, 3)
@@ -79,6 +81,10 @@ class Crystal(object):
         self._F = defgrad.reshape(self._flat_tensor_shape)
         self._FiT = np.transpose(np.linalg.inv(self._F), axes=(0, 2, 1))
 
+        self._density = (
+            density.reshape(self._flat_scalar_shape) if density is not None else 1
+        )
+
         dx = X[1, 0, 0] - X[0, 0, 0]
         dy = Y[0, 1, 0] - Y[0, 0, 0]
         if Z.shape[2] > 1:
@@ -89,7 +95,14 @@ class Crystal(object):
         self.voxel_size = dx
 
     def _get_x_lab_flat(self):
-        return self.goniometer.R @ self._x + self.goniometer.translation[:, np.newaxis]
+        return self.goniometer.R @ (self._x + self.goniometer.u[:, np.newaxis])
+
+    @property
+    def density(self):
+        if isinstance(self._density, np.ndarray):
+            return self._density.reshape(self._grid_scalar_shape)
+        else:
+            return np.ones(self._grid_scalar_shape)
 
     @property
     def X(self):
@@ -413,7 +426,7 @@ class Crystal(object):
         self.align(hkl, axis=np.array([0, 0, 1]))  # align with z-axis first
         Q_0 = self._get_Q_0_sample_flat(hkl)
         theta = laue.get_bragg_angle(Q_0, energy)
-        self.goniometer.relative_move(dmu=-theta)  # align with the bragg condition
+        self.goniometer.relative_move(dmu=theta)  # align with the bragg condition
         eta = 0
         return theta, eta
 
@@ -574,7 +587,12 @@ class Crystal(object):
 
         w = beam(x_lab) * (self.voxel_size**3)
 
-        voxel_volume = (p_Q * w).reshape(self._grid_scalar_shape)
+        voxel_volume = (p_Q * w * self._density).reshape(self._grid_scalar_shape)
+
+        # TODO: Add sample density to the voxel volume.
+        # here it can be done in a hacky way masking out
+        # the sample, probably I should exploit this trhoughout
+        # computation at some point.
 
         image = detector.readout(
             voxel_volume,
@@ -582,7 +600,7 @@ class Crystal(object):
             crl.optical_axis,
             crl.magnification,
             self.goniometer.R,
-            self.goniometer.translation,
+            self.goniometer.u,  # sample space translation.
         )
 
         return image
