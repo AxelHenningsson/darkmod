@@ -1,3 +1,4 @@
+import numba as nb
 import numpy as np
 from scipy.spatial.transform import Rotation
 from scipy.special import erf, iv
@@ -324,68 +325,469 @@ class MultivariateTruncatedNormal(object):
         return exponent
 
 
-class MultivariateNormal(object):
+@nb.njit(
+    parallel=True,
+    nogil=True,
+    cache=True,
+)
+def _sample_diagonal_truncated_normal_numba(
+    mu,
+    std,
+    lower,
+    upper,
+    out,
+):
     """
-    Multivariate Gaussian distribution.
+    Sample independent truncated normal variables.
+
+    Each column of `out` is one multivariate sample. Since the
+    covariance matrix is diagonal, each component can be sampled
+    independently.
+    """
+    dim = out.shape[0]
+    n = out.shape[1]
+
+    for i in nb.prange(n):
+        for a in range(dim):
+            mean = mu[a]
+            sigma = std[a]
+            lo = lower[a]
+            hi = upper[a]
+
+            while True:
+                value = mean + sigma * np.random.standard_normal()
+
+                if lo < value < hi:
+                    out[a, i] = value
+                    break
+
+
+@nb.njit(
+    parallel=True,
+    nogil=True,
+    cache=True,
+)
+def _apply_truncation_numba(
+    x,
+    lower,
+    upper,
+    log_pdf,
+):
+    dim = x.shape[0]
+    n = x.shape[1]
+
+    for i in nb.prange(n):
+        supported = True
+
+        for a in range(dim):
+            value = x[a, i]
+
+            if value < lower[a] or value > upper[a]:
+                supported = False
+                break
+
+        if not supported:
+            log_pdf[i] = -np.inf
+
+
+class MultivariateDiagonalTruncatedNormal:
+    """
+    Multivariate Gaussian distribution with diagonal covariance and
+    independent lower and upper truncation bounds.
 
     Args:
-        mu (:obj:`float`): Mean vector. shape=(n,).
-        cov (:obj:`float`): Covariance matrix. shape=(n,n).
+        mu (:obj:`np.ndarray`):
+            Mean vector with shape ``(n,)``.
+
+        cov (:obj:`np.ndarray`):
+            Diagonal covariance matrix with shape ``(n, n)``.
+
+        a (:obj:`np.ndarray`):
+            Lower truncation bounds with shape ``(n,)`` or ``(n, 1)``.
+
+        b (:obj:`np.ndarray`):
+            Upper truncation bounds with shape ``(n,)`` or ``(n, 1)``.
+
+    Notes:
+        This class does not implement PDF normalization.
+
+        Sampling is exact for a diagonal covariance matrix. Each component
+        is sampled independently from its one-dimensional truncated normal
+        distribution using rejection sampling.
+
+        Parallel sampling uses Numba ``prange`` over output samples.
     """
 
-    def __init__(self, mu, cov):
-        assert cov.shape[0] == mu.shape[0], "covariance and mean shape do not match"
-        assert cov.shape[0] == cov.shape[1], "covariance is not square"
-        assert np.linalg.matrix_rank(cov) == len(mu), "ill conditioned covariance"
-        assert np.linalg.cond(cov) < 1e12, "ill conditioned covariance"
-        assert np.allclose(cov, cov.T), "Covariance is not symmetric"
-        self.mu = mu
-        self.cov = cov
-        self._cov_inv = np.linalg.inv(cov)
+    def __init__(self, mu, cov, a, b):
+        mu = np.asarray(mu, dtype=np.float64).reshape(-1)
+        cov = np.asarray(cov, dtype=np.float64)
+        a = np.asarray(a, dtype=np.float64).reshape(-1)
+        b = np.asarray(b, dtype=np.float64).reshape(-1)
 
-    def __call__(self, x, normalise=True, log=False):
+        dim = mu.size
+
+        if cov.shape != (dim, dim):
+            raise ValueError("Covariance and mean shapes do not match.")
+
+        if a.shape != (dim,):
+            raise ValueError("Lower-bound and mean shapes do not match.")
+
+        if b.shape != (dim,):
+            raise ValueError("Upper-bound and mean shapes do not match.")
+
+        if not np.allclose(cov, cov.T):
+            raise ValueError("Covariance matrix is not symmetric.")
+
+        variance = np.diag(cov)
+
+        if not np.allclose(
+            cov,
+            np.diag(variance),
+        ):
+            raise ValueError(
+                "MultivariateDiagonalTruncatedNormal requires "
+                "a diagonal covariance matrix."
+            )
+
+        if np.any(~np.isfinite(variance)):
+            raise ValueError("Covariance contains non-finite values.")
+
+        if np.any(variance <= 0):
+            raise ValueError("All diagonal covariance entries must be positive.")
+
+        if np.any(a >= b):
+            raise ValueError("Every lower bound must be smaller than its upper bound.")
+
+        self.mu = np.ascontiguousarray(mu)
+        self.cov = np.ascontiguousarray(cov)
+
+        self.a = np.ascontiguousarray(a)
+        self.b = np.ascontiguousarray(b)
+
+        self.std = np.ascontiguousarray(np.sqrt(variance))
+
+        self._cov_inv = np.ascontiguousarray(np.diag(1.0 / variance))
+
+    def __call__(self, x, log=False):
         """
-        Multivariate Gaussian PDF - i.e the likelihood of observing x.
+        Evaluate the non-normalized truncated Gaussian PDF.
 
         Args:
-            x (:obj:`np.ndarray`): Array of probe locations. Each column is a
-                probe locaiton. shape=(dim, number_of_probe_locations).
-            normalise (:obj:`bool`): if true; normalise the distribution. Defaults to True.
-            log (:obj:`bool`): if true; return a log probability. Defaults to False.
+            x (:obj:`np.ndarray`):
+                Probe locations. Each column is one location, with shape
+                ``(dim, number_of_probe_locations)``.
+
+            log (:obj:`bool`):
+                Return log probabilities when True.
 
         Returns:
-            :obj:`float`: Likelihood of the given x.
+            :obj:`np.ndarray`:
+                Probability or log-probability for each column of ``x``.
         """
-        log_exp = self._log_mult_gauss_pdf(x)
-        if normalise and not log:
-            return np.exp(log_exp) / self._norm_factor()
-        elif normalise and log:
-            return log_exp - np.log(self._norm_factor())
-        elif not normalise and not log:
-            return np.exp(log_exp)
-        elif not normalise and log:
-            return log_exp
+        log_pdf = self._log_mult_trunc_gauss_pdf(x)
+
+        if log:
+            return log_pdf
+
+        return np.exp(log_pdf)
+
+    def _is_supported(self, sample):
+        """
+        Return a Boolean mask indicating which columns satisfy all bounds.
+        """
+        sample = np.asarray(sample)
+
+        if sample.ndim != 2:
+            raise ValueError("Sample must have shape (dimension, number_of_samples).")
+
+        if sample.shape[0] != self.mu.size:
+            raise ValueError("Sample dimension does not match distribution dimension.")
+
+        return np.all(
+            (sample > self.a[:, None]) & (sample < self.b[:, None]),
+            axis=0,
+        )
 
     def sample(self, number_of_samples):
         """
-        Generate a sample from the multivariate Normal Distribution.
+        Generate samples from the diagonal multivariate truncated normal.
 
         Args:
-            number_of_samples (:obj:`int`): Number of samples to generate.
+            number_of_samples (:obj:`int`):
+                Number of samples to generate.
 
         Returns:
-            :obj:`np.ndarray`: Sample from a multivariate Gaussian. shape=(n, number_of_samples).
+            :obj:`np.ndarray`:
+                Samples with shape ``(dimension, number_of_samples)``.
         """
+        number_of_samples = int(number_of_samples)
+
+        if number_of_samples < 0:
+            raise ValueError("number_of_samples must be non-negative.")
+
+        out = np.empty(
+            (self.mu.size, number_of_samples),
+            dtype=np.float64,
+        )
+
+        if number_of_samples == 0:
+            return out
+
+        _sample_diagonal_truncated_normal_numba(
+            self.mu,
+            self.std,
+            self.a,
+            self.b,
+            out,
+        )
+
+        return out
+
+    def _log_mult_trunc_gauss_pdf(self, x):
+        x = np.asarray(
+            x,
+            dtype=np.float64,
+            order="C",
+        )
+
+        if x.ndim != 2:
+            raise ValueError("x must have shape (dimension, number_of_points).")
+
+        if x.shape[0] != self.mu.size:
+            raise ValueError("x dimension does not match distribution dimension.")
+
+        out = np.empty(
+            x.shape[1],
+            dtype=np.float64,
+        )
+
+        _mvn_logpdf_numba(
+            x,
+            self.mu,
+            self._cov_inv,
+            0.0,
+            False,
+            out,
+        )
+
+        _apply_truncation_numba(
+            x,
+            self.a,
+            self.b,
+            out,
+        )
+
+        return out
+
+
+@nb.njit(parallel=True, fastmath=True)
+def _mvn_logpdf_numba(x, mu, precision, log_norm, normalise, out):
+    dim = x.shape[0]
+    n = x.shape[1]
+
+    for i in nb.prange(n):
+        q = 0.0
+
+        for a in range(dim):
+            da = x[a, i] - mu[a]
+
+            for b in range(dim):
+                db = x[b, i] - mu[b]
+                q += da * precision[a, b] * db
+
+        y = -0.5 * q
+
+        if normalise:
+            y -= log_norm
+
+        out[i] = y
+
+
+@nb.njit(parallel=True, fastmath=True)
+def _mvn_pdf_numba(x, mu, precision, log_norm, normalise, out):
+    dim = x.shape[0]
+    n = x.shape[1]
+
+    for i in nb.prange(n):
+        q = 0.0
+
+        for a in range(dim):
+            da = x[a, i] - mu[a]
+
+            for b in range(dim):
+                db = x[b, i] - mu[b]
+                q += da * precision[a, b] * db
+
+        y = -0.5 * q
+
+        if normalise:
+            y -= log_norm
+
+        out[i] = np.exp(y)
+
+
+class MultivariateNormal:
+    """
+    Fast multivariate Gaussian distribution.
+
+    x must have shape (dim, n), where each column is one point.
+    """
+
+    def __init__(self, mu, cov, dtype=np.float64):
+        self.mu = np.asarray(mu, dtype=dtype)
+        self.cov = np.asarray(cov, dtype=dtype)
+
+        if self.mu.ndim != 1:
+            raise ValueError("mu must have shape (dim,)")
+
+        if self.cov.ndim != 2:
+            raise ValueError("cov must have shape (dim, dim)")
+
+        if self.cov.shape[0] != self.cov.shape[1]:
+            raise ValueError("covariance is not square")
+
+        if self.cov.shape[0] != self.mu.shape[0]:
+            raise ValueError("covariance and mean shape do not match")
+
+        if not np.allclose(self.cov, self.cov.T):
+            raise ValueError("covariance is not symmetric")
+
+        try:
+            np.linalg.cholesky(self.cov)
+        except np.linalg.LinAlgError:
+            raise ValueError("covariance must be positive definite")
+
+        cond = np.linalg.cond(self.cov)
+        if cond > 1e12:
+            raise ValueError(f"ill-conditioned covariance, cond={cond}")
+
+        sign, logdet = np.linalg.slogdet(self.cov)
+        if sign <= 0:
+            raise ValueError("covariance must be positive definite")
+
+        self.dim = self.mu.shape[0]
+        self.precision = np.linalg.inv(self.cov).astype(dtype, copy=False)
+        self.log_norm = dtype(0.5 * (self.dim * np.log(2.0 * np.pi) + logdet))
+        self.dtype = dtype
+
+    def __call__(self, x, normalise=True, log=False, out=None):
+        x = np.asarray(x)
+
+        if x.ndim != 2:
+            raise ValueError("x must have shape (dim, n)")
+
+        if x.shape[0] != self.dim:
+            raise ValueError(f"x has dim {x.shape[0]}, expected {self.dim}")
+
+        if out is None:
+            out = np.empty(x.shape[1], dtype=x.dtype)
+
+        if out.shape != (x.shape[1],):
+            raise ValueError("out must have shape (n,)")
+
+        if log:
+            _mvn_logpdf_numba(
+                x,
+                self.mu,
+                self.precision,
+                self.log_norm,
+                normalise,
+                out,
+            )
+        else:
+            _mvn_pdf_numba(
+                x,
+                self.mu,
+                self.precision,
+                self.log_norm,
+                normalise,
+                out,
+            )
+
+        return out
+
+    def logpdf(self, x, normalise=True, out=None):
+        return self(x, normalise=normalise, log=True, out=out)
+
+    def pdf(self, x, normalise=True, out=None):
+        return self(x, normalise=normalise, log=False, out=out)
+
+    def sample(self, number_of_samples):
         return np.random.multivariate_normal(
-            self.mu, cov=self.cov, size=(number_of_samples,)
+            self.mu,
+            self.cov,
+            size=number_of_samples,
         ).T
 
     def _log_mult_gauss_pdf(self, x):
-        dx = x - self.mu[:, np.newaxis]
-        return -0.5 * np.sum(dx * (self._cov_inv @ dx), axis=0)
+        return self.logpdf(x, normalise=False)
 
     def _norm_factor(self):
-        return np.sqrt((2 * np.pi) ** len(self.mu) * np.linalg.det(self.cov))
+        return np.exp(self.log_norm)
+
+
+# class MultivariateNormal(object):
+#     """
+#     Multivariate Gaussian distribution.
+
+#     Args:
+#         mu (:obj:`float`): Mean vector. shape=(n,).
+#         cov (:obj:`float`): Covariance matrix. shape=(n,n).
+#     """
+
+#     def __init__(self, mu, cov):
+#         assert cov.shape[0] == mu.shape[0], "covariance and mean shape do not match"
+#         assert cov.shape[0] == cov.shape[1], "covariance is not square"
+#         assert np.linalg.matrix_rank(cov) == len(mu), "ill conditioned covariance"
+#         assert np.linalg.cond(cov) < 1e12, "ill conditioned covariance"
+#         assert np.allclose(cov, cov.T), "Covariance is not symmetric"
+#         self.mu = mu
+#         self.cov = cov
+#         self._cov_inv = np.linalg.inv(cov)
+
+#     def __call__(self, x, normalise=True, log=False):
+#         """
+#         Multivariate Gaussian PDF - i.e the likelihood of observing x.
+
+#         Args:
+#             x (:obj:`np.ndarray`): Array of probe locations. Each column is a
+#                 probe locaiton. shape=(dim, number_of_probe_locations).
+#             normalise (:obj:`bool`): if true; normalise the distribution. Defaults to True.
+#             log (:obj:`bool`): if true; return a log probability. Defaults to False.
+
+#         Returns:
+#             :obj:`float`: Likelihood of the given x.
+#         """
+#         log_exp = self._log_mult_gauss_pdf(x)
+#         if normalise and not log:
+#             return np.exp(log_exp) / self._norm_factor()
+#         elif normalise and log:
+#             return log_exp - np.log(self._norm_factor())
+#         elif not normalise and not log:
+#             return np.exp(log_exp)
+#         elif not normalise and log:
+#             return log_exp
+
+#     def sample(self, number_of_samples):
+#         """
+#         Generate a sample from the multivariate Normal Distribution.
+
+#         Args:
+#             number_of_samples (:obj:`int`): Number of samples to generate.
+
+#         Returns:
+#             :obj:`np.ndarray`: Sample from a multivariate Gaussian. shape=(n, number_of_samples).
+#         """
+#         return np.random.multivariate_normal(
+#             self.mu, cov=self.cov, size=(number_of_samples,)
+#         ).T
+
+#     def _log_mult_gauss_pdf(self, x):
+#         dx = x - self.mu[:, np.newaxis]
+#         return -0.5 * np.sum(dx * (self._cov_inv @ dx), axis=0)
+
+#     def _norm_factor(self):
+#         return np.sqrt((2 * np.pi) ** len(self.mu) * np.linalg.det(self.cov))
 
 
 class Kent:

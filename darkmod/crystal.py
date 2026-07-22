@@ -95,7 +95,11 @@ class Crystal(object):
         self.voxel_size = dx
 
     def _get_x_lab_flat(self):
-        return self.goniometer.R @ (self._x + self.goniometer.u[:, np.newaxis])
+        R = np.asarray(self.goniometer.R)
+        u = np.asarray(self.goniometer.u)
+        out = np.empty_like(self._x)
+        _get_x_lab_flat_numba_kernel(R, u, self._x, out)
+        return out
 
     @property
     def density(self):
@@ -331,7 +335,14 @@ class Crystal(object):
         return Q_lab_flat.T.reshape(self._grid_vector_shape)
 
     def _get_Q_lab_flat(self, hkl):
-        return self.goniometer.R @ self._get_Q_sample_flat(hkl).T
+        if self._F is None:
+            raise ValueError("Please use discretize() to instantiate the field.")
+        R = self.goniometer.R
+        FiT = self._FiT
+        Q0 = self._get_Q_0_sample_flat(hkl)
+        out = np.empty((3, FiT.shape[0]), dtype=FiT.dtype)
+        _get_Q_lab_flat_numba_kernel(R, FiT, Q0, out)
+        return out
 
     def _get_Q_sample_flat(self, hkl):
         if self._F is None:
@@ -585,25 +596,80 @@ class Crystal(object):
                 UserWarning,
             )
 
-        w = beam(x_lab) * (self.voxel_size**3)
+        w = beam(x_lab)
 
-        voxel_volume = (p_Q * w * self._density).reshape(self._grid_scalar_shape)
-
-        # TODO: Add sample density to the voxel volume.
-        # here it can be done in a hacky way masking out
-        # the sample, probably I should exploit this trhoughout
-        # computation at some point.
+        astra_voxel_volume = self._get_voxel_volume_astra_order(p_Q, w)
 
         image = detector.readout(
-            voxel_volume,
+            astra_voxel_volume,
             self.voxel_size,
             crl.optical_axis,
             crl.magnification,
             self.goniometer.R,
-            self.goniometer.u,  # sample space translation.
+            self.goniometer.u,
         )
 
+        # voxel_volume = self._get_voxel_volume(p_Q, w)
+
+        # # TODO: Add sample density to the voxel volume.
+        # # here it can be done in a hacky way masking out
+        # # the sample, probably I should exploit this trhoughout
+        # # computation at some point.
+
+        # image = detector.readout(
+        #     voxel_volume,
+        #     self.voxel_size,
+        #     crl.optical_axis,
+        #     crl.magnification,
+        #     self.goniometer.R,
+        #     self.goniometer.u,  # sample space translation.
+        # )
+
         return image
+
+    def _get_voxel_volume_astra_order(self, p_Q, w):
+        nx, ny, nz = self._grid_scalar_shape
+
+        voxel_volume = np.empty((nz, ny, nx), dtype=np.float32)
+        scale = np.float32(self.voxel_size**3)
+
+        if isinstance(self._density, np.ndarray):
+            _final_voxel_volume_kernel_density_variable_astra_order(
+                p_Q,
+                w,
+                self._density.ravel(),
+                scale,
+                nx,
+                ny,
+                nz,
+                voxel_volume,
+            )
+        else:
+            _final_voxel_volume_kernel_density_uniform_astra_order(
+                p_Q,
+                w,
+                np.float32(self._density),
+                scale,
+                nx,
+                ny,
+                nz,
+                voxel_volume,
+            )
+
+        return voxel_volume
+
+    # def _get_voxel_volume(self, p_Q, w):
+    #     voxel_volume = np.empty_like(p_Q)
+    #     scale = self.voxel_size**3
+    #     if isinstance(self._density, np.ndarray):
+    #         _final_voxel_volume_kernel_density_variable(
+    #             p_Q, w, self._density.ravel(), scale, voxel_volume
+    #         )
+    #     else:
+    #         _final_voxel_volume_kernel_density_uniform(
+    #             p_Q, w, self._density, scale, voxel_volume
+    #         )
+    #     return voxel_volume.reshape(self._grid_scalar_shape)
 
     def write(self, file):
         """write the crystal spatial voxel field to a paraview readable file.
@@ -627,6 +693,133 @@ class Crystal(object):
                 "Voxel Size": np.ones((self._x.shape[1],)) * self.voxel_size,
             },
         ).write(filename)
+
+
+import numba as nb
+
+
+@nb.njit(parallel=True, fastmath=True)
+def _final_voxel_volume_kernel_density_variable_astra_order(
+    p_Q,
+    w,
+    density,
+    scale,
+    nx,
+    ny,
+    nz,
+    out,
+):
+    for idx in nb.prange(p_Q.shape[0]):
+        i = idx // (ny * nz)
+        rem = idx - i * ny * nz
+        j = rem // nz
+        k = rem - j * nz
+
+        out[k, j, i] = p_Q[idx] * w[idx] * density[idx] * scale
+
+
+@nb.njit(parallel=True, fastmath=True)
+def _final_voxel_volume_kernel_density_uniform_astra_order(
+    p_Q,
+    w,
+    density,
+    scale,
+    nx,
+    ny,
+    nz,
+    out,
+):
+    for idx in nb.prange(p_Q.shape[0]):
+        i = idx // (ny * nz)
+        rem = idx - i * ny * nz
+        j = rem // nz
+        k = rem - j * nz
+
+        out[k, j, i] = p_Q[idx] * w[idx] * density * scale
+
+
+@nb.njit(parallel=True, fastmath=True)
+def _get_x_lab_flat_numba_kernel(R, u, x, out):
+    n = x.shape[1]
+
+    t0 = R[0, 0] * u[0] + R[0, 1] * u[1] + R[0, 2] * u[2]
+    t1 = R[1, 0] * u[0] + R[1, 1] * u[1] + R[1, 2] * u[2]
+    t2 = R[2, 0] * u[0] + R[2, 1] * u[1] + R[2, 2] * u[2]
+
+    R00 = R[0, 0]
+    R01 = R[0, 1]
+    R02 = R[0, 2]
+
+    R10 = R[1, 0]
+    R11 = R[1, 1]
+    R12 = R[1, 2]
+
+    R20 = R[2, 0]
+    R21 = R[2, 1]
+    R22 = R[2, 2]
+
+    for i in nb.prange(n):
+        x0 = x[0, i]
+        x1 = x[1, i]
+        x2 = x[2, i]
+
+        out[0, i] = R00 * x0 + R01 * x1 + R02 * x2 + t0
+        out[1, i] = R10 * x0 + R11 * x1 + R12 * x2 + t1
+        out[2, i] = R20 * x0 + R21 * x1 + R22 * x2 + t2
+
+
+@nb.njit(parallel=True, fastmath=True)
+def _get_Q_lab_flat_numba_kernel(R, FiT, Q0, out):
+    n = FiT.shape[0]
+
+    R00 = R[0, 0]
+    R01 = R[0, 1]
+    R02 = R[0, 2]
+
+    R10 = R[1, 0]
+    R11 = R[1, 1]
+    R12 = R[1, 2]
+
+    R20 = R[2, 0]
+    R21 = R[2, 1]
+    R22 = R[2, 2]
+
+    q00 = Q0[0]
+    q01 = Q0[1]
+    q02 = Q0[2]
+
+    for i in nb.prange(n):
+        F00 = FiT[i, 0, 0]
+        F01 = FiT[i, 0, 1]
+        F02 = FiT[i, 0, 2]
+
+        F10 = FiT[i, 1, 0]
+        F11 = FiT[i, 1, 1]
+        F12 = FiT[i, 1, 2]
+
+        F20 = FiT[i, 2, 0]
+        F21 = FiT[i, 2, 1]
+        F22 = FiT[i, 2, 2]
+
+        qs0 = F00 * q00 + F01 * q01 + F02 * q02
+        qs1 = F10 * q00 + F11 * q01 + F12 * q02
+        qs2 = F20 * q00 + F21 * q01 + F22 * q02
+
+        out[0, i] = R00 * qs0 + R01 * qs1 + R02 * qs2
+        out[1, i] = R10 * qs0 + R11 * qs1 + R12 * qs2
+        out[2, i] = R20 * qs0 + R21 * qs1 + R22 * qs2
+
+
+# @nb.njit(parallel=True, fastmath=True)
+# def _final_voxel_volume_kernel_density_variable(p_Q, w, density, scale, out):
+#     for i in nb.prange(p_Q.shape[0]):
+#         out[i] = p_Q[i] * w[i] * density[i] * scale
+
+
+# @nb.njit(parallel=True, fastmath=True)
+# def _final_voxel_volume_kernel_density_uniform(p_Q, w, density, scale, out):
+#     for i in nb.prange(p_Q.shape[0]):
+#         out[i] = p_Q[i] * w[i] * density * scale
 
 
 if __name__ == "__main__":

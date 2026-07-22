@@ -1,15 +1,65 @@
 import matplotlib.pyplot as plt
+import numba as nb
 import numpy as np
+from numba import njit, prange
 from scipy.interpolate import RegularGridInterpolator
 
 from darkmod import laue
 from darkmod.distribution import (
     Kent,
+    MultivariateDiagonalTruncatedNormal,
     MultivariateNormal,
-    MultivariateTruncatedNormal,
     Normal,
 )
 from darkmod.transforms import Q_to_lab, lab_to_Q
+
+
+@nb.njit(
+    nogil=True,
+    cache=True,
+)
+def _accumulate_histogramdd_uniform_numba(
+    sample,
+    lower_edges,
+    spacing,
+    counts,
+):
+    nx, ny, nz = counts.shape
+    n = sample.shape[1]
+
+    x0, y0, z0 = lower_edges
+    dx, dy, dz = spacing
+
+    inv_dx = 1.0 / dx
+    inv_dy = 1.0 / dy
+    inv_dz = 1.0 / dz
+
+    xmax = x0 + nx * dx
+    ymax = y0 + ny * dy
+    zmax = z0 + nz * dz
+
+    for i in range(n):
+        x = sample[0, i]
+        y = sample[1, i]
+        z = sample[2, i]
+
+        if x < x0 or x > xmax or y < y0 or y > ymax or z < z0 or z > zmax:
+            continue
+
+        ix = int((x - x0) * inv_dx)
+        iy = int((y - y0) * inv_dy)
+        iz = int((z - z0) * inv_dz)
+
+        if ix == nx:
+            ix = nx - 1
+
+        if iy == ny:
+            iy = ny - 1
+
+        if iz == nz:
+            iz = nz - 1
+
+        counts[ix, iy, iz] += 1
 
 
 class TruncatedPentaGauss(object):
@@ -87,8 +137,8 @@ class TruncatedPentaGauss(object):
                 self._par["upper_bound_CRL_vertical"],
             ]
         ).reshape(5, 1)
-
-        self._x = MultivariateTruncatedNormal(
+        print("using MultivariateDiagonalTruncatedNormal")
+        self._x = MultivariateDiagonalTruncatedNormal(
             np.array([1.0, 0.0, 0.0, 0.0, 0.0]),
             self._cov_x,
             self._lower_bound_x,
@@ -151,73 +201,194 @@ class TruncatedPentaGauss(object):
 
     def compile(
         self,
-        resolution=(5 * 1e-4, 5 * 1e-4, 5 * 1e-4),
+        resolution=(5e-4, 5e-4, 5e-4),
         ranges=(5, 5, 5),
         number_of_samples=None,
+        support_samples=1_000_000,
+        chunk_size=10_000_000,
+        store_integration_points=False,
     ):
-        """Compile an approximation of the reciprocal resolution function (p_Q) in lab frame.
+        """
+        Compile a Monte Carlo approximation of the reciprocal-space
+        resolution function.
 
-        This function will run monte-carlo integration for p_Q at a series of selected
-        grid-points that are equidistantly spaced by the bin width `resolution`.
-
-        The range of the query grid is determined by sampling the distirbution of Q and
-        selecting the dimensions in each direction (x,y,z) as a multiple of the numerical
-        standard deviations of the sample. The multiples are determined by the `ranges`
-        parameter and apply in the local Q-coordinate-system.
-
-        NOTE: The resolution function as interfaced in the __call__ method of this class
-        (and as given by the attribute `p_Q`) is always given in the lab-system. The grid
-        over which p_Q is internally defined is however taken in the Q-system, since, in
-        general, p_Q is observed to have a close to diagonal covariacne in the Q-system.
-        Coordinate conversions to map an input lab-vector to Q-system is handled internally.
+        Sampling is performed in chunks, while all samples are accumulated
+        directly into a single dense histogram.
 
         Args:
-            resolution (:obj:`iterable` of `float`): Reciprocal space resolution.
-                Defaults to (5*1e-5,5*1e-5,5*1e-5).
-            ranges (:obj:`iterable` of `float`): Number of standard deviations that will
-                define the range over which p_Q is integrated. Higher multiples gives a
-                larger support for p_Q. Defaults to (3,3,3).
-            number_of_samples (:obj:`int`): Number of samples per integration point. More samples
-                gives less error in p_Q at the cost of computational speed. Defaults to None in which
-                the number of samples are choosen to correspond to 100 samples per bin up to a max of 2*1e7
-                samples.
+            resolution:
+                Reciprocal-space grid spacing in each Q direction.
 
+            ranges:
+                Approximate number of standard deviations included in each
+                Q direction.
+
+            number_of_samples:
+                Total number of Monte Carlo samples. If None, approximately
+                100 samples per bin are used, up to 40 million samples.
+
+            support_samples:
+                Number of samples used to estimate the lookup-grid support.
+
+            chunk_size:
+                Maximum number of Monte Carlo samples processed at once.
+
+            store_integration_points:
+                Store all lookup-grid points in laboratory coordinates.
+                This is expensive and normally unnecessary.
         """
+        resolution = np.asarray(
+            resolution,
+            dtype=np.float64,
+        )
+
+        ranges = np.asarray(
+            ranges,
+            dtype=np.float64,
+        )
+
+        if resolution.shape != (3,):
+            raise ValueError("resolution must contain exactly three values")
+
+        if ranges.shape != (3,):
+            raise ValueError("ranges must contain exactly three values")
+
+        if np.any(resolution <= 0):
+            raise ValueError("all resolution values must be positive")
+
+        if np.any(ranges <= 0):
+            raise ValueError("all range values must be positive")
+
+        support_samples = int(support_samples)
+        chunk_size = int(chunk_size)
+
+        if support_samples <= 0:
+            raise ValueError("support_samples must be positive")
+
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+
         q_ranges = self.estimate_p_Q_support(
-            self.Q, resolution, ranges, number_of_samples=200000
-        )
-        q_points_lab, grid_shape = self._get_integration_points(q_ranges)
-        voxel_volume = np.prod(
-            resolution
-        )  # the volume associated to an integration point
-
-        bins_edges = (
-            self._bin_centers_to_edges(q_ranges[0]),
-            self._bin_centers_to_edges(q_ranges[1]),
-            self._bin_centers_to_edges(q_ranges[2]),
+            self.Q,
+            resolution,
+            ranges,
+            number_of_samples=support_samples,
         )
 
-        nbins = len(bins_edges[0]) * len(bins_edges[1]) * len(bins_edges[2])
+        grid_shape = tuple(len(axis) for axis in q_ranges)
+
+        nbins = int(np.prod(grid_shape, dtype=np.int64))
 
         if number_of_samples is None:
-            number_of_samples = np.min([100 * nbins, 20000000])
+            number_of_samples = min(
+                100 * nbins,
+                40_000_000,
+            )
 
-        p_Qs = []
-        for n in range(5):
-            sample = self.sample(number_of_samples // 5)
-            sample = lab_to_Q(sample, self.Q)
-            p_Q, edges = np.histogramdd(sample.T, bins=bins_edges, density=True)
-            p_Qs.append(p_Q)
+        number_of_samples = int(number_of_samples)
 
-        self.p_Q = np.mean(p_Qs, axis=0)
-        self.std_p_Q = np.std(p_Qs, axis=0)
+        if number_of_samples <= 0:
+            raise ValueError("number_of_samples must be positive")
 
-        # TODO: this seems like a reasonable KDE like thing to go for...
-        # from scipy.ndimage import gaussian_filter
-        # self.p_Q = gaussian_filter(self.p_Q, sigma=[r/3. for r in resolution])
+        number_of_chunks = (number_of_samples + chunk_size - 1) // chunk_size
 
-        self._integration_points = q_points_lab  # for testing purpose we store these.
-        self._set_interpolation(q_ranges, self.p_Q, self.std_p_Q)
+        lower_edges = np.array(
+            [
+                q_ranges[0][0] - 0.5 * resolution[0],
+                q_ranges[1][0] - 0.5 * resolution[1],
+                q_ranges[2][0] - 0.5 * resolution[2],
+            ],
+            dtype=np.float64,
+        )
+
+        print(f"Using {number_of_samples:,} samples in {number_of_chunks} chunks")
+
+        print(f"Grid shape: {grid_shape} ({nbins:,} bins)")
+
+        samples_per_bin = number_of_samples / nbins
+
+        print(f"Average samples per bin: {samples_per_bin:.4g}")
+
+        if samples_per_bin < 1:
+            print("Warning: fewer than one sample per bin on average")
+
+        # uint32 is sufficient while total sample count remains below 2**32.
+        if number_of_samples >= np.iinfo(np.uint32).max:
+            raise ValueError(
+                "number_of_samples is too large for uint32 histogram counts"
+            )
+
+        total_counts = np.zeros(
+            grid_shape,
+            dtype=np.uint32,
+        )
+
+        # Combine:
+        #
+        #     x -> self._get_M() @ x -> lab_to_Q(...)
+        #
+        # into one matrix multiplication.
+        M_q = np.ascontiguousarray(
+            lab_to_Q(
+                self._get_M(),
+                self.Q,
+            ),
+            dtype=np.float64,
+        )
+
+        collected_samples = 0
+
+        while collected_samples < number_of_samples:
+            current_chunk_size = min(
+                chunk_size,
+                number_of_samples - collected_samples,
+            )
+
+            x_sample = self._x.sample(current_chunk_size)
+
+            sample_q = np.ascontiguousarray(
+                M_q @ x_sample,
+                dtype=np.float64,
+            )
+
+            _accumulate_histogramdd_uniform_numba(
+                sample_q,
+                lower_edges,
+                resolution,
+                total_counts,
+            )
+
+            collected_samples += current_chunk_size
+
+        maximum_count = int(np.max(total_counts))
+
+        if maximum_count <= 0:
+            raise RuntimeError("No Monte Carlo samples entered the lookup grid")
+
+        # Division by number_of_samples is unnecessary because the lookup
+        # function is normalized by its maximum.
+        self.p_Q = total_counts.astype(np.float32)
+
+        self.p_Q /= maximum_count
+
+        # Poisson uncertainty in the same peak-normalized units.
+        self.std_p_Q = np.sqrt(
+            total_counts,
+            dtype=np.float32,
+        )
+
+        self.std_p_Q /= maximum_count
+
+        if store_integration_points:
+            self._integration_points, _ = self._get_integration_points(q_ranges)
+        else:
+            self._integration_points = None
+
+        self._set_interpolation(
+            q_ranges,
+            self.p_Q,
+            self.std_p_Q,
+        )
 
         self._is_compiled = True
 
@@ -248,17 +419,28 @@ class TruncatedPentaGauss(object):
             else:
                 dQ_angular_shift = 0
 
-            Q_vectors_q_system = lab_to_Q(
-                Q_vectors + dQ_angular_shift + self.dQ_theta_shift, self.Q
-            )
-            p_Q = self._p_Q_interp(Q_vectors_q_system.T)
+                Q_vectors_q_system = lab_to_Q(
+                    Q_vectors + dQ_angular_shift + self.dQ_theta_shift,
+                    self.Q,
+                )
 
-            if error_estimate:
-                std_p_Q = self._std_p_Q_interp(Q_vectors_q_system.T)
-                return p_Q, std_p_Q
-            else:
+                p_Q = trilinear_uniform_grid(
+                    Q_vectors_q_system,
+                    self._p_Q_values,
+                    self._interp_origin,
+                    self._interp_spacing,
+                )
+
+                if error_estimate:
+                    std_p_Q = trilinear_uniform_grid(
+                        Q_vectors_q_system,
+                        self._std_p_Q_values,
+                        self._interp_origin,
+                        self._interp_spacing,
+                    )
+                    return p_Q, std_p_Q
+
                 return p_Q
-
         else:
             raise ValueError(
                 "The resolution function requires compiling before any calls can be made to the PDF."
@@ -340,6 +522,10 @@ class TruncatedPentaGauss(object):
         mx, my, mz = np.mean(Q_sample_q_system, axis=1)
         stdx, stdy, stdz = np.std(Q_sample_q_system, axis=1)
 
+        print("Q_sample_q_system stdx", stdx)
+        print("Q_sample_q_system stdy", stdy)
+        print("Q_sample_q_system stdz", stdz)
+
         xmin = -rx - rx * ((Nx * stdx) // rx) + mx
         xmax = +rx + rx * ((Nx * stdx) // rx) + mx
 
@@ -356,9 +542,49 @@ class TruncatedPentaGauss(object):
         return qx_range, qy_range, qz_range
 
     def _set_interpolation(self, points, p_Q, std_p_Q):
-        """Setup regular grid interpolators defined in Q-system."""
+        """Set up fast interpolation on the uniform Q-system grid."""
+
+        qx, qy, qz = points
+
+        self._interp_origin = np.array(
+            [qx[0], qy[0], qz[0]],
+            dtype=np.float64,
+        )
+
+        self._interp_spacing = np.array(
+            [
+                qx[1] - qx[0],
+                qy[1] - qy[0],
+                qz[1] - qz[0],
+            ],
+            dtype=np.float64,
+        )
+
+        if not (
+            np.allclose(np.diff(qx), self._interp_spacing[0])
+            and np.allclose(np.diff(qy), self._interp_spacing[1])
+            and np.allclose(np.diff(qz), self._interp_spacing[2])
+        ):
+            raise ValueError("Interpolation grid must be uniformly spaced.")
+
+        self._p_Q_values = np.ascontiguousarray(
+            p_Q,
+            dtype=np.float64,
+        )
+
+        self._std_p_Q_values = np.ascontiguousarray(
+            std_p_Q,
+            dtype=np.float64,
+        )
+
+        # Retain SciPy interpolators temporarily for validation.
         self._p_Q_interp = self._rgi(points, p_Q)
         self._std_p_Q_interp = self._rgi(points, std_p_Q)
+
+    # def _set_interpolation(self, points, p_Q, std_p_Q):
+    #     """Setup regular grid interpolators defined in Q-system."""
+    #     self._p_Q_interp = self._rgi(points, p_Q)
+    #     self._std_p_Q_interp = self._rgi(points, std_p_Q)
 
     def _rgi(self, points, values):
         """Setup a regular grid interpolator."""
@@ -611,6 +837,103 @@ class PentaGauss(object):
         s, c = np.sin(self.eta_0), np.cos(self.eta_0)
         Rx = np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
         return Rx @ Ry
+
+
+@njit(parallel=True, nogil=True, cache=True)
+def trilinear_uniform_grid(points, values, origin, spacing):
+    """
+    Trilinear interpolation on a uniform 3D grid.
+
+    Parameters
+    ----------
+    points : (3, N) float array
+        Query coordinates.
+    values : (nx, ny, nz) float array
+        Grid values.
+    origin : (3,) float array
+        Coordinate of values[0, 0, 0].
+    spacing : (3,) float array
+        Grid spacing.
+
+    Returns
+    -------
+    out : (N,) float array
+
+    Points outside the grid return zero, matching:
+        RegularGridInterpolator(..., bounds_error=False, fill_value=0)
+    """
+    nx, ny, nz = values.shape
+    n_points = points.shape[1]
+
+    out = np.empty(n_points, dtype=np.float64)
+
+    x0, y0, z0 = origin
+    dx, dy, dz = spacing
+
+    xmax = x0 + dx * (nx - 1)
+    ymax = y0 + dy * (ny - 1)
+    zmax = z0 + dz * (nz - 1)
+
+    for n in prange(n_points):
+        x = points[0, n]
+        y = points[1, n]
+        z = points[2, n]
+
+        if np.isnan(x) or np.isnan(y) or np.isnan(z):
+            out[n] = np.nan
+            continue
+
+        if x < x0 or x > xmax or y < y0 or y > ymax or z < z0 or z > zmax:
+            out[n] = 0.0
+            continue
+
+        ux = (x - x0) / dx
+        uy = (y - y0) / dy
+        uz = (z - z0) / dz
+
+        ix = int(np.floor(ux))
+        iy = int(np.floor(uy))
+        iz = int(np.floor(uz))
+
+        # Handle points exactly on the final grid planes.
+        if ix == nx - 1:
+            ix = nx - 2
+            tx = 1.0
+        else:
+            tx = ux - ix
+
+        if iy == ny - 1:
+            iy = ny - 2
+            ty = 1.0
+        else:
+            ty = uy - iy
+
+        if iz == nz - 1:
+            iz = nz - 2
+            tz = 1.0
+        else:
+            tz = uz - iz
+
+        c000 = values[ix, iy, iz]
+        c001 = values[ix, iy, iz + 1]
+        c010 = values[ix, iy + 1, iz]
+        c011 = values[ix, iy + 1, iz + 1]
+        c100 = values[ix + 1, iy, iz]
+        c101 = values[ix + 1, iy, iz + 1]
+        c110 = values[ix + 1, iy + 1, iz]
+        c111 = values[ix + 1, iy + 1, iz + 1]
+
+        c00 = c000 + tz * (c001 - c000)
+        c01 = c010 + tz * (c011 - c010)
+        c10 = c100 + tz * (c101 - c100)
+        c11 = c110 + tz * (c111 - c110)
+
+        c0 = c00 + ty * (c01 - c00)
+        c1 = c10 + ty * (c11 - c10)
+
+        out[n] = c0 + tx * (c1 - c0)
+
+    return out
 
 
 class DualKentGauss(object):

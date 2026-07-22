@@ -17,5 +17,5 @@ dependencies = ["numpy",
 "matplotlib",
 "pandas",
 "xfab",
-"astra",
+"astra-toolbox",
 ]

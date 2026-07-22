@@ -1,3 +1,4 @@
+import numba as nb
 import numpy as np
 
 from darkmod.distribution import Normal
@@ -80,27 +81,26 @@ class GaussianBeam(object):
         return self._intensity_y(x[1]) * self._intensity_z(x[2])
 
 
-class GaussianLineBeam(object):
-    """Represents a Gaussian beam with specified standard deviation and energy.
+@nb.njit(parallel=True, fastmath=True)
+def _gaussian_line_beam_kernel(z, inv_2var, prefactor, out):
+    n = z.shape[0]
 
-    The beam as Gaussian intensity cross section profile in z-lab.
-    The beam has uniform profile along y-lab.
-    The beam propagates along x-lab.
+    for i in nb.prange(n):
+        out[i] = prefactor * np.exp(-z[i] * z[i] * inv_2var)
 
-    Args:
-        z_std (:obj:`float`): Standard deviation of the beam in z-lab.
-        energy (:obj:`float`): Energy of the beam.
+
+class GaussianLineBeam:
+    """
+    Gaussian line beam.
+
+    Beam propagates along x_lab.
+    Uniform along y_lab.
+    Gaussian along z_lab.
     """
 
     def __init__(self, z_std, energy):
-        """Initialize the Gaussian beam.
-
-        Args:
-            z_std (:obj:`float`): Standard deviation of the beam in z-lab.
-            energy (:obj:`float`): Energy of the beam.
-        """
-        self.z_std = z_std
         self.energy = energy
+        self.z_std = z_std
 
     @property
     def z_std(self):
@@ -108,24 +108,34 @@ class GaussianLineBeam(object):
 
     @z_std.setter
     def z_std(self, value):
-        self._z_std = value
-        self._intensity_z = Normal(0, value)
+        self._z_std = float(value)
+        self._inv_2var = 0.5 / (self._z_std * self._z_std)
+        self._prefactor = 1.0 / (np.sqrt(2.0 * np.pi) * self._z_std)
 
-    def __call__(self, x):
-        """Calculate beam intensity weights based on the input positions.
+    def __call__(self, x, out=None):
+        x = np.asarray(x)
 
-        Args:
-            x (:obj:`numpy.ndarray`): Lab coordinates, shape=(3,N).
-
-        Returns:
-            :obj:`numpy.ndarray`: Intensity weight for the given positions.
-        """
         if x.ndim == 1:
-            return self._intensity_z(x)
+            z = x
+        elif x.ndim == 2:
+            if x.shape[0] != 3:
+                raise ValueError("x must have shape (3, n)")
+            z = x[2]
         else:
-            return self._intensity_z(x[2])
+            raise ValueError("x must have shape (n,) or (3, n)")
+
+        if out is None:
+            out = np.empty(z.shape[0], dtype=z.dtype)
+
+        _gaussian_line_beam_kernel(
+            z,
+            np.asarray(self._inv_2var, dtype=z.dtype),
+            np.asarray(self._prefactor, dtype=z.dtype),
+            out,
+        )
+
+        return out
 
 
 if __name__ == "__main__":
-    pass
     pass

@@ -35,7 +35,7 @@ class Goniometer:
         return self.R @ self.u
 
     def goto_lab_translation(self, tx, ty, tz):
-        self.u = self.R.inv() @ np.array([tx, ty, tz])
+        self.u = self.R.T @ np.array([tx, ty, tz])
 
     def relative_move(self, dphi=None, dchi=None, domega=None, dmu=None):
         if dphi is not None:
